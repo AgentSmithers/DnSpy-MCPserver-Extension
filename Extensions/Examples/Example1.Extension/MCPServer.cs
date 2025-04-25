@@ -130,7 +130,7 @@ namespace Example1.Extension {
 			}
 
 
-			public static void PrettyPrintJson(string json) //x64Dbg does not support {}, remove them or it will crash
+			public static void PrettyPrintJson(string json)
 			{
 				try {
 					using JsonDocument doc = JsonDocument.Parse(json);
@@ -448,7 +448,6 @@ namespace Example1.Extension {
 						lock (_commands) // Lock if _commands could be modified elsewhere
 						{
 							foreach (var cmd in _commands) {
-								// Add filtering similar to tools/list if needed (DebugOnly, X64DbgOnly etc.)
 								var methodInfo = cmd.Value;
 								var attribute = methodInfo.GetCustomAttribute<CommandAttribute>();
 								if (attribute != null && (!attribute.DebugOnly /* || Debugger.IsAttached *//* || Add Bridge checks if needed */)) {
@@ -508,8 +507,8 @@ namespace Example1.Extension {
 						prompts = new { }, // Indicate prompt support
 						resources = new { } // Indicate resource support
 					},
-					serverInfo = new { name = "AgentSmithers-X64DbgMcpServer", version = "1.0.0" }, // Your server details
-					instructions = "Welcome to the .NET x64Dbg MCP Server!" // Optional instructions
+					serverInfo = new { name = "AgentSmithers-dnSpyExMcpServer", version = "1.0.0" }, // Your server details
+					instructions = "Welcome to the AgentSmithers dnSpyEx MCP Server!" // Optional instructions
 				};
 				SendSseResult(sessionId, id, result);
 			}
@@ -524,9 +523,7 @@ namespace Example1.Extension {
 						string commandName = command.Key;
 						MethodInfo methodInfo = command.Value;
 						var attribute = methodInfo.GetCustomAttribute<CommandAttribute>();
-
-						// Apply filtering (DebugOnly, X64DbgOnly), for now always return true to support Claude desktop app. All commands must be available at the start of the session
-						if (attribute != null && (!attribute.DebugOnly || (isDebuggerAttached && IsActivelyDebugging || true)/* || Bridge.DbgIsDebugging() */ )) {
+						if (attribute != null && (!attribute.DebugOnly || (isDebuggerAttached && IsActivelyDebugging || true) )) {
 							var parameters = methodInfo.GetParameters();
 							var properties = new Dictionary<string, object>();
 							var required = new List<string>();
@@ -1068,13 +1065,13 @@ namespace Example1.Extension {
 			private readonly List<PromptInfo> _prompts = new List<PromptInfo>
 			{
 			new PromptInfo {
-				name = "X64DbgPrompt", // Unique name stored inside the object
-                description = "Prompt used as a default to ask the AI to use the X64Dbg functionality",
+				name = "dnSpyEx Prompt", // Unique name stored inside the object
+                description = "Prompt used as a default to ask the AI to use the dnSpyEx functionality",
 				arguments = new List<PromptArgument> { /* Empty */ },
 				messageTemplates = new List<PromptMessageTemplate> {
 					new PromptMessageTemplate {
 						role = "user",
-						content = new PromptContentTemplate { type = "text", text = "You are an AI assistant with access to an MCP (Model Context Protocol) server. Your goal is to complete tasks by calling the available commands on this server." }
+						content = new PromptContentTemplate { type = "text", text = "You are an AI assistant with access to an MCP (Model Context Protocol) server. Your goal is to complete tasks by calling the available commands on this server which is connected to dnSpyEx designed for decompiling .NET applications." }
 					}
 				}
 			}
