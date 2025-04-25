@@ -131,9 +131,8 @@ namespace Example1.Extension {
 					if (true) 
 					{
 						dnWindow.MainWindow.Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Normal, new Action(() => {
-							var askToOpenPage = MsgBox.Instance.Show($"There is a update available", MsgBoxButton.Yes | MsgBoxButton.No);
-							if (askToOpenPage == MsgBoxButton.Yes) {
-								//Global.MySimpleMCPServer = new SimpleMcpServer(null);							
+							var askToOpenPage = MsgBox.Instance.Show($"Attach your debugger", MsgBoxButton.Yes | MsgBoxButton.No);
+							if (askToOpenPage == MsgBoxButton.Yes) {			
 							}
 
 							Global.MySimpleMCPServer = new SimpleMcpServer(MyMCPCommands.GetType());
