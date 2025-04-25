@@ -32,3 +32,5 @@ https://github.com/AgentSmithers/MCPProxy-STDIO-to-SSE
 Attach the Bridge AFTER hitting "OK" and your good to go.
 
 ![image](https://github.com/user-attachments/assets/b8fa494e-2962-4733-a1f9-83f729c29811)
+
+![image](https://github.com/user-attachments/assets/851e1ef0-e9ee-400b-b185-4cbde3739894)
