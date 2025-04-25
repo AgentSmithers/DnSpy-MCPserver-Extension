@@ -1,5 +1,15 @@
+using System;
+using System.Collections.Generic;
+using System.ComponentModel.Composition;
+using dnlib.DotNet;
+using dnlib.PE;
 using dnSpy.Contracts.App;
+using dnSpy.Contracts.Documents;
+using dnSpy.Contracts.Documents.Tabs.DocViewer;
+using dnSpy.Contracts.Documents.TreeView;
 using dnSpy.Contracts.Menus;
+using dnSpy.Contracts.TreeView;
+using Microsoft.VisualStudio.Text.Editor;
 
 // Adds a new "_Extension" menu and several commands.
 // Adds a command to the View menu
@@ -11,6 +21,8 @@ namespace Example1.Extension {
 		public const string GROUP_EXTENSION_MENU1 = "0,73BEBC37-387A-4004-8076-A1A90A17611B";
 		public const string GROUP_EXTENSION_MENU2 = "10,C21B8B99-A2E4-474F-B4BC-4CF348ECBD0A";
 	}
+
+	
 
 	// Create the Extension menu and place it right after the Debug menu
 	[ExportMenu(OwnerGuid = MenuConstants.APP_MENU_GUID, Guid = MainMenuConstants.APP_MENU_EXTENSION, Order = MenuConstants.ORDER_APP_MENU_DEBUG + 0.1, Header = "_Extension")]
@@ -24,7 +36,33 @@ namespace Example1.Extension {
 
 	[ExportMenuItem(OwnerGuid = MainMenuConstants.APP_MENU_EXTENSION, Header = "Command #2", Group = MainMenuConstants.GROUP_EXTENSION_MENU1, Order = 10)]
 	sealed class ExtensionCommand2 : MenuItemBase {
-		public override void Execute(IMenuItemContext context) => MsgBox.Instance.Show("Command #2");
+
+		static IDsDocument? GetDocument(TreeNodeData node) {
+			var fileNode = node as DsDocumentNode;
+			if (fileNode is null)
+				return null;
+
+			var peImage = fileNode.Document.PEImage;
+			if (peImage is null)
+				peImage = (fileNode.Document.ModuleDef as ModuleDefMD)?.Metadata?.PEImage;
+
+			return (peImage as IInternalPEImage)?.IsMemoryMappedIO == true ? fileNode.Document : null;
+		}
+		public override void Execute(IMenuItemContext context) {
+			dnSpy.Contracts.Documents.DsDocument activeDocumentService = null;
+			var activeTextView = activeDocumentService;
+			var docViewer = context.Find<IDocumentViewer>();
+			var reference = context.Find<TextReference>();
+
+			if (context.CreatorObject.Guid != new Guid(MenuConstants.GUIDOBJ_DOCUMENTS_TREEVIEW_GUID))
+				return;
+			var asms = new List<IDsDocument>();
+			foreach (var node in (context.Find<TreeNodeData[]>() ?? Array.Empty<TreeNodeData>())) {
+				var file = GetDocument(node);
+			}
+			foreach (var asm in asms)
+				(asm.PEImage as IInternalPEImage)?.UnsafeDisableMemoryMappedIO();
+		}
 	}
 
 	[ExportMenuItem(OwnerGuid = MainMenuConstants.APP_MENU_EXTENSION, Header = "Command #3", Group = MainMenuConstants.GROUP_EXTENSION_MENU2, Order = 0)]

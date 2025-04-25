@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk.WindowsDesktop">
+﻿<Project Sdk="Microsoft.NET.Sdk.WindowsDesktop">
 
   <Import Project="..\..\..\DnSpyCommon.props" />
 
@@ -6,6 +6,7 @@
     <AssemblyName>Example1.Extension.x</AssemblyName>
     <Nullable>enable</Nullable>
     <UseWPF>true</UseWPF>
+    <TargetFrameworks>net48</TargetFrameworks>
   </PropertyGroup>
 
   <ItemGroup>
@@ -15,6 +16,15 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.VisualStudio.Text.UI.Wpf" Version="$(MSVSTextVersion)" />
+    <PackageReference Include="System.Text.Json" Version="9.0.4" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="ICSharpCode.TreeView">
+      <HintPath>..\..\..\Libraries\ICSharpCode.TreeView\bin\Debug\net48\ICSharpCode.TreeView.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Web" />
+    <Reference Include="System.Web.Extensions" />
   </ItemGroup>
 
 </Project>

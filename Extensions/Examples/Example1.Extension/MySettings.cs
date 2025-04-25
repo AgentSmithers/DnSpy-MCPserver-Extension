@@ -51,6 +51,7 @@ namespace Example1.Extension {
 		}
 	}
 
+
 	// Export this class so it can be imported by other classes in this extension
 	[Export(typeof(MySettings))]
 	sealed class MySettingsImpl : MySettings {
