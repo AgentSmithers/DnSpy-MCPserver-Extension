@@ -135,13 +135,32 @@ namespace Example1.Extension {
 							if (askToOpenPage == MsgBoxButton.Yes) {			
 							}
 
+							
 							Global.MySimpleMCPServer = new SimpleMcpServer(MyMCPCommands.GetType());
 							Global.MyTreeView = MyTreeView;
 							Global.MySimpleMCPServer.Start();
-							MCPCommands.DumpParentNodes();
-							MCPCommands.DumpNameSpaceNodes("CNETTrafficFighterWeb");
-							MCPCommands.DumpClassNodes("CNETTrafficFighterWeb", "TwilioClass", true);
-							MCPCommands.DumpFunction("CNETTrafficFighterWeb", "TwilioClass", "get_GetFriendlyName", true);
+
+							string AssemblyName = "CNETTrafficFighterWeb";
+							string NamespaceName = "CNETTrafficFighterWeb.com.myqnapcloud.desertqnap";
+							string ClassName = "API";
+							string FunctionName = "HelloWorld";
+
+							var Asms = MCPCommands.DumpLoadedAssemblies(); //List all active Assemblys
+							var Namespaces = MCPCommands.DumpNamespacesFromAssembly(AssemblyName); //Dumps all Namespaces in an Assembly
+							var ClassList = MCPCommands.DumpClassesFromNamespace(AssemblyName, NamespaceName);
+							var FunctionPrototypeList = MCPCommands.DumpMethodPrototypes(AssemblyName, NamespaceName, ClassName);
+							var ClassSoureCode = MCPCommands.DumpClassCode(AssemblyName, NamespaceName, ClassName);
+							var FunctionSourceCode = MCPCommands.DumpMethodsSourcode(AssemblyName, NamespaceName, ClassName, FunctionName);
+
+							var Classes = MCPCommands.DumpClasses(AssemblyName, NamespaceName, "", false); //Dumps all Classes in a Namespace
+							var ClassesWithFunctions = MCPCommands.DumpClasses(AssemblyName, NamespaceName, "", true); //Dumps all Classes in a Namespace including their function prototypes
+							var ClassWithFunctions = MCPCommands.DumpClasses(AssemblyName, NamespaceName, ClassName, true); //Dumps specific Class functions, Use the Dump Functions command
+							var ClassSourceCode = MCPCommands.DumpClasses(AssemblyName, NamespaceName, ClassName, false, true); //Dumps full source for specific class
+
+							var functions = MCPCommands.DumpMethods(AssemblyName, NamespaceName, ClassName, "", false); //Dumps specific Class functions
+							var function = MCPCommands.DumpMethods(AssemblyName, NamespaceName, ClassName, FunctionName, true); //Dumps source for specific function
+							
+
 							//MyMCPCommands.DumpAllNamespaceClassesAndFunctions("CNETTrafficFighterWeb");
 
 							if (ToolWindowService != null) {
