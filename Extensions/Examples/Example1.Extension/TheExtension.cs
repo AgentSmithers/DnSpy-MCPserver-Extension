@@ -5,35 +5,16 @@ using System.Diagnostics;
 using System.Threading;
 using System.Windows;
 using dnSpy.Contracts.App;
-using dnSpy.Contracts.Controls;
 using dnSpy.Contracts.Decompiler;
-using dnSpy.Contracts.Documents.Tabs;
 using dnSpy.Contracts.Extension;
-using dnSpy.Contracts.Images;
-using dnSpy.Contracts.Settings.Dialog;
 using dnSpy.Contracts.TreeView;
-using dnSpy.Contracts.ToolWindows;
-using System.ComponentModel.Design;
 using dnSpy.Contracts.ToolWindows.App;
-using dnSpy.Contracts.Menus;
-using Microsoft.VisualStudio.Utilities;
-using System.Windows.Media;
-using ICSharpCode.TreeView;
-using System.Diagnostics.Contracts;
-using System.Windows.Media.TextFormatting;
-using System.Windows.Controls;
-using System.Reflection;
 using dnlib.DotNet;
 using dnSpy.Contracts.Text;
 using System.IO;
 using System.Text;
 using System.Runtime.InteropServices;
 using dnSpy.Contracts.Documents.TreeView;
-using System.Windows.Documents;
-using dnSpy.Contracts.Documents.Tabs.DocViewer;
-using System.ComponentModel;
-using System.Linq;
-using System.Web.UI.WebControls;
 using static Example1.Extension.SimpleMcpServer;
 
 // Each extension should export one class implementing IExtension
@@ -138,6 +119,7 @@ namespace Example1.Extension {
 							
 							Global.MySimpleMCPServer = new SimpleMcpServer(MyMCPCommands.GetType());
 							Global.MyTreeView = MyTreeView;
+							Global.MyAppWindow = dnWindow;
 							Global.MySimpleMCPServer.Start();
 
 							string AssemblyName = "CNETTrafficFighterWeb";

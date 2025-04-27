@@ -19,6 +19,7 @@ namespace Example1.Extension {
 	{
 		public static SimpleMcpServer MySimpleMCPServer;
 		public static IDocumentTreeView MyTreeView;
+		public static dnSpy.Contracts.App.IAppWindow MyAppWindow;
 	}
 	class SimpleMcpServer {
 			private readonly HttpListener _listener = new HttpListener();

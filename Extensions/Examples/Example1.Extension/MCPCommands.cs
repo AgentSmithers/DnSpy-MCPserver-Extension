@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Drawing;
 using System.Drawing.Imaging;
 using System.Linq;
 using System.Text;
@@ -8,6 +9,7 @@ using System.Threading.Tasks;
 using dnlib.DotNet;
 using dnSpy.Contracts.Documents.TreeView;
 using dnSpy.Contracts.TreeView;
+using ICSharpCode.TreeView;
 using static Example1.Extension.SimpleMcpServer;
 
 namespace Example1.Extension
@@ -95,274 +97,373 @@ namespace Example1.Extension
 			";
 		}
 
+		[Command("Get_Selected_Node", MCPCmdDescription = "Gets the currently selected node within dnSpyEx")]
+		public static string GetCurrentlySelectItem() {
+			try {
+				// 1) we declare a local to capture the result
+				object selected = null;
+
+				// 2) marshal the read to the TreeView's UI thread
+				var tv = Global.MyTreeView.TreeView;
+				Global.MyAppWindow.MainWindow.Dispatcher.Invoke(() => {
+					selected = tv.SelectedItem;
+				});
+
+				// 3) nothing selected?
+				if (selected == null)
+					return string.Empty;
+
+				// 4) if it’s a DocumentTreeNodeData (or one of its sub-interfaces), pull out a name
+				if (selected is DocumentTreeNodeData docNode) {
+					// e.g. for methods/types you might want the metadata name: //"dnSpy.Documents.TreeView.MethodNodeImpl"}
+					if (docNode is dnSpy.Contracts.Documents.TreeView.AssemblyDocumentNode tn)
+						return "Assembly Document: " + tn.NodePathName.Name;
+					if (docNode is dnSpy.Contracts.Documents.TreeView.AssemblyReferenceNode an)
+						return "Assembly Reference: " + an.NodePathName.Name;
+					
+					if (docNode is dnSpy.Contracts.Documents.TreeView.NamespaceNode nn)
+						return "Namespace: " + nn.NodePathName.Name;
+					if (docNode is dnSpy.Contracts.Documents.TreeView.TypeNode tyn)
+						return "Class Type: " + tyn.NodePathName.Name;
+
+					if (docNode is dnSpy.Contracts.Documents.TreeView.MethodNode mn)
+						return "MethodNode: " + mn.NodePathName.Name;
+					if (docNode is dnSpy.Contracts.Documents.TreeView.FieldNode fn)
+						return "FieldNode: " + fn.NodePathName.Name;
+					// …etc…
+					// fallback:
+					var type = docNode.GetType();
+					return docNode.Icon.Name + ": " + docNode.NodePathName.Name;
+				}
+
+				// 5) otherwise just ToString()
+				return selected.ToString()!;
+			}
+			catch (Exception ex) {
+				return $"Exception: {ex.Message}";
+			}
+		}
+
+
+
 
 		[Command("Get_Loaded_Assemblies", MCPCmdDescription = "Gets all Assemblys currently loaded within dnSpyEx")]
 		public static string DumpLoadedAssemblies() {
-			string DataToReturn = "";
-			Debug.WriteLine("-ModuleDocumentNode-");
-			ModuleDef MyModule;
-			foreach (ModuleDocumentNode Modnode in Global.MyTreeView.GetAllModuleNodes().ToList()) {
-				MyModule = Modnode.GetModule();
-				Debug.WriteLine("\t" + MyModule.Name + "->" + MyModule.Assembly.Name + " Location: " + MyModule.Location);
-				DataToReturn += MyModule.Assembly.Name + "\r\n";
+			try { 
+				string DataToReturn = "";
+				Debug.WriteLine("-ModuleDocumentNode-");
+				ModuleDef MyModule;
+				foreach (ModuleDocumentNode Modnode in Global.MyTreeView.GetAllModuleNodes().ToList()) {
+					MyModule = Modnode.GetModule();
+					Debug.WriteLine("\t" + MyModule.Name + "->" + MyModule.Assembly.Name + " Location: " + MyModule.Location);
+					DataToReturn += MyModule.Assembly.Name + "\r\n";
+				}
+				return DataToReturn;
 			}
-			return DataToReturn;
+			catch (Exception ex) {
+				return $"Exception: " + ex.Message;
+			}
 		}
 
 
 		[Command("Namespaces_From_Assembly", MCPCmdDescription = "Dumps all unique namespaces under a given Assembly.")]
 		public static string DumpNamespacesFromAssembly(string AssemblyName) {
-			var sb = new StringBuilder();
-			Debug.WriteLine("- Unique Namespaces -");
+			try { 
+				var sb = new StringBuilder();
+				Debug.WriteLine("- Unique Namespaces -");
 
-			// 1) Gather all TypeDefs from modules whose assembly name matches the filter
-			var myTypes = Global.MyTreeView
-				.GetAllModuleNodes()
-				.Where(mod => mod.GetModule().Assembly.Name.StartsWith(AssemblyName, StringComparison.OrdinalIgnoreCase))
-				.SelectMany(mod => mod.TreeNode.Data.GetModule().GetTypes())
-				.ToList();
+				// 1) Gather all TypeDefs from modules whose assembly name matches the filter
+				var myTypes = Global.MyTreeView
+					.GetAllModuleNodes()
+					.Where(mod => mod.GetModule().Assembly.Name.StartsWith(AssemblyName, StringComparison.OrdinalIgnoreCase))
+					.SelectMany(mod => mod.TreeNode.Data.GetModule().GetTypes())
+					.ToList();
 
-			// 2) Extract distinct namespace strings
-			var uniqueNamespaces = myTypes
-				.Select(t => t.Namespace)
-				.Where(ns => !string.IsNullOrEmpty(ns))
-				.Distinct()
-				.OrderBy(ns => ns);
+				// 2) Extract distinct namespace strings
+				var uniqueNamespaces = myTypes
+					.Select(t => t.Namespace)
+					.Where(ns => !string.IsNullOrEmpty(ns))
+					.Distinct()
+					.OrderBy(ns => ns);
 
-			// 3) Output each namespace
-			foreach (var ns in uniqueNamespaces) {
-				Debug.WriteLine("\t" + ns);
-				sb.AppendLine(ns);
+				// 3) Output each namespace
+				foreach (var ns in uniqueNamespaces) {
+					Debug.WriteLine("\t" + ns);
+					sb.AppendLine(ns);
+				}
+
+				return sb.ToString();
 			}
-
-			return sb.ToString();
+			catch (Exception ex) {
+				return $"Exception: " + ex.Message;
+			}
 		}
 
 		[Command("Classes_From_Namespace", MCPCmdDescription = "List all Classes under a given Namespace.")]
 		public static string DumpClassesFromNamespace(string AssemblyName, string Namespace) {
-			string DataToReturn = "";
-			Debug.WriteLine("-ModuleDocumentNodes-");
-			ModuleDef Assemblies;
-			foreach (ModuleDocumentNode Modnode in Global.MyTreeView.GetAllModuleNodes().ToList()) {
-				Assemblies = Modnode.GetModule();
-				Debug.WriteLine(Assemblies.Name);				
-				if (Assemblies.Assembly.Name==(AssemblyName)) { //Assemblies.Name = *.dll
-					DataToReturn += Assemblies.Assembly.Name + "\r\n";
-					var ModTypes = Modnode.TreeNode.Data.GetModule().GetTypes().OrderBy(t => t.Name.ToString(), StringComparer.OrdinalIgnoreCase).ToList();
-					foreach (TypeDef MyType in ModTypes) {
-						if (MyType.Namespace == Namespace) {
-							if (MyType.FullName.StartsWith(Namespace)) {
-								Debug.WriteLine(MyType.FullName); //The Class
-								DataToReturn += "\t" + MyType.FullName + "\r\n";
+			try { 
+				string DataToReturn = "";
+				Debug.WriteLine("-ModuleDocumentNodes-");
+				ModuleDef Assemblies;
+				foreach (ModuleDocumentNode Modnode in Global.MyTreeView.GetAllModuleNodes().ToList()) {
+					Assemblies = Modnode.GetModule();
+					Debug.WriteLine(Assemblies.Name);				
+					if (Assemblies.Assembly.Name==(AssemblyName)) { //Assemblies.Name = *.dll
+						DataToReturn += Assemblies.Assembly.Name + "\r\n";
+						var ModTypes = Modnode.TreeNode.Data.GetModule().GetTypes().OrderBy(t => t.Name.ToString(), StringComparer.OrdinalIgnoreCase).ToList();
+						foreach (TypeDef MyType in ModTypes) {
+							if (MyType.Namespace == Namespace) {
+								if (MyType.FullName.StartsWith(Namespace)) {
+									Debug.WriteLine(MyType.FullName); //The Class
+									DataToReturn += "\t" + MyType.FullName + "\r\n";
+								}
 							}
 						}
 					}
 				}
+				return DataToReturn;
 			}
-			return DataToReturn;
+			catch (Exception ex) {
+				return $"Exception: " + ex.Message;
+			}
 		}
 
 		[Command("Get_Class_Sourcecode", MCPCmdDescription = "Dumps a target Class sourcecode")]
 		public static string DumpClassCode(string Assembly, string Namespace, string ClassName) { //Dumps a Classes sourcecode
-			string DataToReturn = "";
-			//Debug.WriteLine("-MethodDef-");
+			try {
+				string DataToReturn = "";
+				//Debug.WriteLine("-MethodDef-");
 
-			ModuleDef MyModuleDef;
-			foreach (ModuleDocumentNode Modnode in Global.MyTreeView.GetAllModuleNodes().ToList()) {
-				MyModuleDef = Modnode.GetModule();
-				if (MyModuleDef.Assembly.Name==(Assembly)) {
-					Debug.WriteLine("\t" + MyModuleDef.Name); //GemBox.Spreadsheet.dll
-					//Debug.WriteLine("\t" + Modnode.GetModule().Name);
-					//DataToReturn += Modnode.GetModule().Name + "\r\n";
+				ModuleDef MyModuleDef;
+				foreach (ModuleDocumentNode Modnode in Global.MyTreeView.GetAllModuleNodes().ToList()) {
+					MyModuleDef = Modnode.GetModule();
+					if (MyModuleDef.Assembly.Name==(Assembly)) {
+						Debug.WriteLine("\t" + MyModuleDef.Name); //GemBox.Spreadsheet.dll
+						//Debug.WriteLine("\t" + Modnode.GetModule().Name);
+						//DataToReturn += Modnode.GetModule().Name + "\r\n";
 
-					var ModNode = Modnode.TreeNode.Data.GetModuleNode();
-					var ModTypes = Modnode.TreeNode.Data.GetModule().GetTypes().OrderBy(t => t.FullName, StringComparer.OrdinalIgnoreCase).ToList();
-					//DataToReturn += "\t" + DumpNode(Modnode.TreeNode, 1);
-					foreach (TypeDef MyType in ModTypes) {
-						Debug.WriteLine("\t" + MyType.FullName);
-						if (MyType.Namespace == Namespace) {
-							if (MyType.Name == ClassName) {
-								if (MyType.FullName.StartsWith(Namespace + "." + ClassName)) { //+MethodName
-																							   //Debug.WriteLine(TheExtension.DumpSource(Modnode, MyType)); //The class as a whole
-									DataToReturn += TheExtension.DumpSource(Modnode, MyType);
-								}
-							}
-						}
-					}
-				}
-			}
-			return DataToReturn;
-		}
-
-		[Command("Get_Method_Prototypes", MCPCmdDescription = "List all Method prototypes from a givin Class within a given Namespace.")]
-		public static string DumpMethodPrototypes(string Assembly, string Namespace, string ClassName) {
-			string DataToReturn = "";
-			//Debug.WriteLine("-MethodDef-");
-
-			ModuleDef MyModuleDef;
-			foreach (ModuleDocumentNode Modnode in Global.MyTreeView.GetAllModuleNodes().ToList()) {
-				MyModuleDef = Modnode.GetModule();
-				if (MyModuleDef.Assembly.Name==(Assembly)) {
-					Debug.WriteLine("\t" + MyModuleDef.Name);
-					DataToReturn += MyModuleDef.Name + "\r\n";
-					var ModTypes = Modnode.TreeNode.Data.GetModule().GetTypes().OrderBy(t => t.FullName, StringComparer.OrdinalIgnoreCase).ToList();
-					foreach (TypeDef MyType in ModTypes) 
-					{
-						Debug.WriteLine("\t" + MyType.FullName);		
-						//if (MyType.FullName.StartsWith(Namespace + "." + ClassName)) { //+MethodName
-						if (MyType.Namespace == Namespace) 
-						{ 
-							if (MyType.Name == ClassName) 
-							{
-								DataToReturn += "\t" + MyType.FullName + "\r\n";
-								List<MethodDef> Methods = MyType.Methods.OrderBy(t => t.Name.ToString(), StringComparer.OrdinalIgnoreCase).ToList();
-								foreach (MethodDef MyMethod in Methods) 
-								{
-									DataToReturn += "\t\t" + MyMethod.FullName + "\r\n";
-								}
-							}
-						}
-					}
-				}
-			}
-			return DataToReturn;
-		}
-
-		[Command("Get_Method_SourceCode", MCPCmdDescription = "Dumps a target Method's sourcecode")]
-		public static string DumpMethodsSourcode(string Assembly, string Namespace, string ClassName, string MethodName) {
-			string DataToReturn = "";
-			//Debug.WriteLine("-MethodDef-");
-			ModuleDef MyModuleDef;
-			foreach (ModuleDocumentNode Modnode in Global.MyTreeView.GetAllModuleNodes().ToList()) {
-				MyModuleDef = Modnode.GetModule();
-				if (MyModuleDef.Assembly.Name == (Assembly)) {
-					Debug.WriteLine("\t" + MyModuleDef.Name);
-					//DataToReturn += MyModuleDef.Name + "\r\n";
-					var ModTypes = Modnode.TreeNode.Data.GetModule().GetTypes().OrderBy(t => t.FullName, StringComparer.OrdinalIgnoreCase).ToList();
-					foreach (TypeDef MyType in ModTypes) {
-						Debug.WriteLine("\t" + MyType.FullName);
-						if (MyType.Namespace == Namespace) {
-							if (MyType.Name == ClassName) {
-								//DataToReturn += "\t" + MyType.FullName + "\r\n";
-								List<MethodDef> Methods = MyType.Methods.OrderBy(t => t.Name.ToString(), StringComparer.OrdinalIgnoreCase).ToList();
-								foreach (MethodDef MyMethod in Methods) {
-									if (MyMethod.Name == (MethodName)) {
-										DataToReturn += TheExtension.DumpSource(Modnode, MyMethod);
+						var ModNode = Modnode.TreeNode.Data.GetModuleNode();
+						var ModTypes = Modnode.TreeNode.Data.GetModule().GetTypes().OrderBy(t => t.FullName, StringComparer.OrdinalIgnoreCase).ToList();
+						//DataToReturn += "\t" + DumpNode(Modnode.TreeNode, 1);
+						foreach (TypeDef MyType in ModTypes) {
+							Debug.WriteLine("\t" + MyType.FullName);
+							if (MyType.Namespace == Namespace) {
+								if (MyType.Name == ClassName) {
+									if (MyType.FullName.StartsWith(Namespace + "." + ClassName)) { //+MethodName
+																								   //Debug.WriteLine(TheExtension.DumpSource(Modnode, MyType)); //The class as a whole
+										DataToReturn += TheExtension.DumpSource(Modnode, MyType);
 									}
 								}
 							}
 						}
 					}
 				}
+				return DataToReturn;
 			}
-			return DataToReturn;
+			catch (Exception ex) {
+				return $"Exception: " + ex.Message;
+			}
+		}
+
+		[Command("Get_Method_Prototypes", MCPCmdDescription = "List all Method prototypes from a givin Class within a given Namespace.")]
+		public static string DumpMethodPrototypes(string Assembly, string Namespace, string ClassName) {
+			try { 
+				string DataToReturn = "";
+				//Debug.WriteLine("-MethodDef-");
+
+				ModuleDef MyModuleDef;
+				foreach (ModuleDocumentNode Modnode in Global.MyTreeView.GetAllModuleNodes().ToList()) {
+					MyModuleDef = Modnode.GetModule();
+					if (MyModuleDef.Assembly.Name==(Assembly)) {
+						Debug.WriteLine("\t" + MyModuleDef.Name);
+						DataToReturn += MyModuleDef.Name + "\r\n";
+						var ModTypes = Modnode.TreeNode.Data.GetModule().GetTypes().OrderBy(t => t.FullName, StringComparer.OrdinalIgnoreCase).ToList();
+						foreach (TypeDef MyType in ModTypes) 
+						{
+							Debug.WriteLine("\t" + MyType.FullName);		
+							//if (MyType.FullName.StartsWith(Namespace + "." + ClassName)) { //+MethodName
+							if (MyType.Namespace == Namespace) 
+							{ 
+								if (MyType.Name == ClassName) 
+								{
+									DataToReturn += "\t" + MyType.FullName + "\r\n";
+									List<MethodDef> Methods = MyType.Methods.OrderBy(t => t.Name.ToString(), StringComparer.OrdinalIgnoreCase).ToList();
+									foreach (MethodDef MyMethod in Methods) 
+									{
+										DataToReturn += "\t\t" + MyMethod.FullName + "\r\n";
+									}
+								}
+							}
+						}
+					}
+				}
+				return DataToReturn;
+			}
+			catch (Exception ex) {
+				return $"Exception: " + ex.Message;
+			}
+		}
+
+		[Command("Get_Method_SourceCode", MCPCmdDescription = "Dumps a target Method's sourcecode")]
+		public static string DumpMethodsSourcode(string Assembly, string Namespace, string ClassName, string MethodName) {
+			try {
+				string DataToReturn = "";
+				//Debug.WriteLine("-MethodDef-");
+				ModuleDef MyModuleDef;
+				foreach (ModuleDocumentNode Modnode in Global.MyTreeView.GetAllModuleNodes().ToList()) {
+					MyModuleDef = Modnode.GetModule();
+					if (MyModuleDef.Assembly.Name == (Assembly)) {
+						Debug.WriteLine("\t" + MyModuleDef.Name);
+						//DataToReturn += MyModuleDef.Name + "\r\n";
+						var ModTypes = Modnode.TreeNode.Data.GetModule().GetTypes().OrderBy(t => t.FullName, StringComparer.OrdinalIgnoreCase).ToList();
+						foreach (TypeDef MyType in ModTypes) {
+							Debug.WriteLine("\t" + MyType.FullName);
+							if (MyType.Namespace == Namespace) {
+								if (MyType.Name == ClassName) {
+									//DataToReturn += "\t" + MyType.FullName + "\r\n";
+									List<MethodDef> Methods = MyType.Methods.OrderBy(t => t.Name.ToString(), StringComparer.OrdinalIgnoreCase).ToList();
+									foreach (MethodDef MyMethod in Methods) {
+										if (MyMethod.Name == (MethodName)) {
+											DataToReturn += TheExtension.DumpSource(Modnode, MyMethod);
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+				return DataToReturn;
+			}
+			catch (Exception ex) {
+				return $"Exception: " + ex.Message;
+			}
 		}
 
 		[Command("Rename_Namespace", MCPCmdDescription = "Renames exactly one distinct namespace across all types.")]
-		public static string RenameNamespace(string OldNamespace, string NewNamespace) {
-			// 1) Gather every TypeDef from every module
-			var allTypes = Global.MyTreeView
-				.GetAllModuleNodes()
-				.SelectMany(modNode => modNode.TreeNode.Data.GetModule().GetTypes());
+		public static string RenameNamespace(string Assembly, string Old_Namespace_Name, string New_Namespace_Name) {
+			try {
+				// 1) Gather every TypeDef from every module
+				var allTypes = Global.MyTreeView
+					.GetAllModuleNodes()
+					.SelectMany(modNode => modNode.TreeNode.Data.GetModule().GetTypes());
 
-			// 2) Pull out only the distinct namespace strings
-			var distinctNamespaces = allTypes
-				.Select(t => t.Namespace)
-				.Distinct()
-				.ToList();
+				// 2) Pull out only the distinct namespace strings
+				var distinctNamespaces = allTypes
+					.Select(t => t.Namespace)
+					.Distinct()
+					.ToList();
 
-			// 3) Find matches exactly equal to OldNamespace
-			var matches = distinctNamespaces
-				.Where(ns => ns == OldNamespace)
-				.ToList();
+				// 3) Find matches exactly equal to OldNamespace
+				var matches = distinctNamespaces
+					.Where(ns => ns == Old_Namespace_Name)
+					.ToList();
 
-			if (matches.Count == 1) {
-				// 4) Rename every TypeDef that was in that namespace
-				int renamedCount = 0;
-				foreach (var type in allTypes.Where(t => t.Namespace == OldNamespace)) {
-					type.Namespace = NewNamespace;
-					renamedCount++;
+				if (matches.Count == 1) {
+					// 4) Rename every TypeDef that was in that namespace
+					int renamedCount = 0;
+					foreach (var mytype in allTypes.Where(t => t.Namespace == Old_Namespace_Name)) { //This works for renaming the class, not correct for namespace.
+						mytype.Namespace = New_Namespace_Name;
+						UTF8String Mystring = New_Namespace_Name;
+						mytype.Name = Mystring;
+						renamedCount++;
+					}
+					var type = matches[0];
+					
+					return $"Namespace '{Old_Namespace_Name}' renamed to '{New_Namespace_Name}' in {renamedCount} types.";
 				}
-				return $"Namespace '{OldNamespace}' renamed to '{NewNamespace}' in {renamedCount} types.";
+				else if (matches.Count == 0) {
+					return $"No namespace found matching '{Old_Namespace_Name}'.";
+				}
+				else {
+					// (shouldn't really happen, since we're matching ==, but just in case)
+					return $"Multiple namespaces found matching '{Old_Namespace_Name}': {string.Join(", ", matches)}. Rename aborted.";
+				}
 			}
-			else if (matches.Count == 0) {
-				return $"No namespace found matching '{OldNamespace}'.";
+			catch (Exception ex) {
+				return $"Exception: " + ex.Message;
 			}
-			else {
-				// (shouldn't really happen, since we're matching ==, but just in case)
-				return $"Multiple namespaces found matching '{OldNamespace}': {string.Join(", ", matches)}. Rename aborted.";
-			}
+			
 		}
-
 
 		[Command("Rename_Class", MCPCmdDescription = "Renames a specific class within a given Namespace.")]
 		public static string RenameClass(string Assembly, string Namespace, string OldClassName, string NewClassName) { //Not validated yet
-			if (!Debugger.IsAttached) {
-				return "Method not available at this time until the developer validates this function";
-			}
-			var matches = new List<TypeDef>();
-			foreach (ModuleDocumentNode ModNode in Global.MyTreeView.GetAllModuleNodes().ToList()) {
-				ModuleDef MyModule = ModNode.GetModule();
-				if (MyModule.Assembly.Name==(Assembly)) {
-					var types = ModNode.TreeNode.Data.GetModule().GetTypes().ToList();					
+			try {
+				if (!Debugger.IsAttached) {
+					return "Method not available at this time until the developer validates this function";
+				}
+				var matches = new List<TypeDef>();
+				foreach (ModuleDocumentNode ModNode in Global.MyTreeView.GetAllModuleNodes().ToList()) {
+					ModuleDef MyModule = ModNode.GetModule();
+					if (MyModule.Assembly.Name == (Assembly)) {
+						var types = ModNode.TreeNode.Data.GetModule().GetTypes().ToList();
 
-					foreach (TypeDef myType in types) {
-						Debug.WriteLine(myType.FullName + " " + myType.Name);
+						foreach (TypeDef myType in types) {
+							Debug.WriteLine(myType.FullName + " " + myType.Name);
+						}
+						//matches.AddRange(types.Where(t => t.FullName.StartsWith(Namespace + "." + OldClassName)));
+						matches.AddRange(types.Where(t => t.Name == (OldClassName)));
 					}
-					//matches.AddRange(types.Where(t => t.FullName.StartsWith(Namespace + "." + OldClassName)));
-					matches.AddRange(types.Where(t => t.Name == (OldClassName)));
+				}
+
+				if (matches.Count == 1) {
+					var type = matches[0];
+					type.Name = NewClassName;
+					return $"{Namespace}.{OldClassName} renamed to {NewClassName} successfully";
+				}
+				else if (matches.Count == 0) {
+					return $"No classes found matching '{OldClassName}' in namespace {Namespace}.";
+				}
+				else {
+					var found = string.Join(", ", matches.Select(t => t.FullName));
+					return $"Multiple classes found matching '{OldClassName}': {found}. Be more specific, Rename aborted.";
 				}
 			}
-
-			if (matches.Count == 1) {
-				var type = matches[0];
-				type.Name = NewClassName;
-				return $"{Namespace}.{OldClassName} renamed to {NewClassName} successfully";
-			}
-			else if (matches.Count == 0) {
-				return $"No classes found matching '{OldClassName}' in namespace {Namespace}.";
-			}
-			else {
-				var found = string.Join(", ", matches.Select(t => t.FullName));
-				return $"Multiple classes found matching '{OldClassName}': {found}. Be more specific, Rename aborted.";
+			catch(Exception ex) {
+				return $"Exception: " + ex.Message;
 			}
 		}
 
 		[Command("Rename_Method", MCPCmdDescription = "Renames a specific Methods by Class within a given Namespace.")]
 		public static string RenameMethod(string Assembly, string Namespace, string ClassName, string MethodName, string Newname) {
-			// collect all candidate Methods
-			var matches = new List<MethodDef>();
+			try 
+			{ 
+				// collect all candidate Methods
+				var matches = new List<MethodDef>();
 
-			foreach (ModuleDocumentNode ModNode in Global.MyTreeView.GetAllModuleNodes().ToList()) {
-				ModuleDef MyModule = ModNode.GetModule();
-				if (MyModule.Assembly.Name==(Assembly)) {
-					var ModTypes = ModNode.TreeNode.Data.GetModule().GetTypes().ToList();
-					foreach (TypeDef MyType in ModTypes) {
-						if (MyType.Namespace == Namespace) {
-							if (MyType.Name == (ClassName)) {
-								// add any Method whose name contains the target MethodName
-								matches.AddRange(
-									MyType.Methods
-										  .Where(m => m.Name.Contains(MethodName))
-								);
+				foreach (ModuleDocumentNode ModNode in Global.MyTreeView.GetAllModuleNodes().ToList()) {
+					ModuleDef MyModule = ModNode.GetModule();
+					if (MyModule.Assembly.Name==(Assembly)) {
+						var ModTypes = ModNode.TreeNode.Data.GetModule().GetTypes().ToList();
+						foreach (TypeDef MyType in ModTypes) {
+							if (MyType.Namespace == Namespace) {
+								if (MyType.Name == (ClassName)) {
+									// add any Method whose name contains the target MethodName
+									matches.AddRange(
+										MyType.Methods
+											  .Where(m => m.Name.Contains(MethodName))
+									);
+								}
 							}
 						}
 					}
 				}
-			}
 
-			// decide based on how many matches we got
-			if (matches.Count == 1) {
-				matches[0].Name = Newname;
-				return $"{Namespace}->{ClassName}->{MethodName} renamed to {Newname} successfully";
+				// decide based on how many matches we got
+				if (matches.Count == 1) {
+					matches[0].Name = Newname;
+					return $"{Namespace}->{ClassName}->{MethodName} renamed to {Newname} successfully";
+				}
+				else if (matches.Count == 0) {
+					return $"No Methods found matching '{MethodName}' in {Namespace}.{ClassName}.";
+				}
+				else {
+					// list the ambiguous matches
+					var found = string.Join(", ", matches.Select(m => m.Name));
+					return $"Multiple Methods found matching '{MethodName}': {found}. Be more specific, Rename aborted.";
+				}
 			}
-			else if (matches.Count == 0) {
-				return $"No Methods found matching '{MethodName}' in {Namespace}.{ClassName}.";
-			}
-			else {
-				// list the ambiguous matches
-				var found = string.Join(", ", matches.Select(m => m.Name));
-				return $"Multiple Methods found matching '{MethodName}': {found}. Be more specific, Rename aborted.";
+			catch (Exception ex) {
+				return $"Exception: " + ex.Message;
 			}
 		}
 
