@@ -536,16 +536,60 @@ namespace Example1.Extension {
 								string paramType = GetJsonSchemaType(param.ParameterType);
 								// --- CORRECTED: Use generic description as fallback ---
 								string paramDescription = $"Parameter '{paramName}' for {commandName}";
-								// --- You could add specific descriptions here based on param.Name if desired ---
-								// Example: if (paramName == "address") { paramDescription = "Memory address..."; }
+							// --- You could add specific descriptions here based on param.Name if desired ---
+							// Example: if (paramName == "address") { paramDescription = "Memory address..."; }
 
+							object parameterSchema; // Use 'object' to hold the anonymous type
 
-								properties[paramName] = new { type = paramType, description = paramDescription };
+							// --- MODIFICATION START ---
+							// Check if the parameter type IS an array
+							if (param.ParameterType.IsArray) // More direct check than relying on GetJsonSchemaType's string output alone
+							{
+								// Get the type of the elements IN the array
+								Type? elementType = param.ParameterType.GetElementType();
 
-								if (!param.IsOptional) {
-									required.Add(paramName);
+								if (elementType != null) {
+									// Get the JSON schema type string for the element type
+									string itemSchemaType = GetJsonSchemaType(elementType);
+
+									// Create the schema object for an array, including the 'items' field
+									parameterSchema = new {
+										type = "array", // Explicitly set type as array
+										description = paramDescription,
+										items = new { // Define the schema for items WITHIN the array
+											type = itemSchemaType
+											// You could add description for items too:
+											// description = $"Element of type {itemSchemaType}"
+										}
+									};
+								}
+								else {
+									// Should not happen for valid arrays, but handle defensively
+									parameterSchema = new {
+										type = "array",
+										description = $"{paramDescription} (Warning: Could not determine array element type)"
+										// Provide a default or skip 'items' if elementType is null
+										// items = new { type = "string" } // Example fallback maybe? Or omit items.
+									};
 								}
 							}
+							else // Parameter is NOT an array
+							{
+								// Create the schema object for a non-array type (as before)
+								parameterSchema = new {
+									type = paramType, // Use the type determined by GetJsonSchemaType
+									description = paramDescription
+								};
+							}
+							// --- MODIFICATION END ---
+
+							// Add the constructed schema to the properties dictionary
+							properties[paramName] = parameterSchema;
+
+							if (!param.IsOptional) {
+								required.Add(paramName);
+							}
+						}
 
 							// MCP Tool Definition structure
 							toolsList.Add(new {
@@ -561,6 +605,9 @@ namespace Example1.Extension {
 							});
 						}
 					}
+
+
+
 				}
 
 				// Add built-in Echo if desired (though the main handler already has it)

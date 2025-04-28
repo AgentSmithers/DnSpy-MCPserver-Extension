@@ -52,7 +52,25 @@ namespace Example1.Extension {
 			Copyright = "Copyright 2019 DeStilleGast (except on Newtonsoft.Json.dll that is included)"
 		};
 
-		public static string DumpSource(ModuleDocumentNode Mod, ModuleDef methodDef) {
+		public static string DumpSource(ModuleDocumentNode Mod, ModuleDef moduleDef) {
+			var decCtx = new DecompilationContext();
+			var sb = new StringBuilder();
+			using (var sw = new StringWriter(sb)) {
+				var indenter = new Indenter(4, 4, true);
+				var textOutput = new TextWriterDecompilerOutput(sw, indenter);
+				Mod.Context.Decompiler.Decompile(moduleDef, textOutput, decCtx);  // :contentReference[oaicite:1]{index=1}
+			}
+			try {
+				Debug.WriteLine(sb.ToString());
+				return sb.ToString();
+			}
+			catch (ExternalException) {
+				// swallow
+			}
+			return null;
+		}
+
+		public static string DumpSource(ModuleDocumentNode Mod, MethodDef methodDef) { //MethodDef is a function
 			var decCtx = new DecompilationContext();
 			var sb = new StringBuilder();
 			using (var sw = new StringWriter(sb)) {
@@ -70,25 +88,7 @@ namespace Example1.Extension {
 			return null;
 		}
 
-		public static string DumpSource(ModuleDocumentNode Mod, MethodDef methodDef) {
-			var decCtx = new DecompilationContext();
-			var sb = new StringBuilder();
-			using (var sw = new StringWriter(sb)) {
-				var indenter = new Indenter(4, 4, true);
-				var textOutput = new TextWriterDecompilerOutput(sw, indenter);
-				Mod.Context.Decompiler.Decompile(methodDef, textOutput, decCtx);  // :contentReference[oaicite:1]{index=1}
-			}
-			try {
-				Debug.WriteLine(sb.ToString());
-				return sb.ToString();
-			}
-			catch (ExternalException) {
-				// swallow
-			}
-			return null;
-		}
-
-		public static string DumpSource(ModuleDocumentNode Mod, TypeDef typeDef) {
+		public static string DumpSource(ModuleDocumentNode Mod, TypeDef typeDef) { //typeDef is a class
 			var decCtx = new DecompilationContext();
 			var sb = new StringBuilder();
 			using (var sw = new StringWriter(sb)) {
@@ -107,7 +107,7 @@ namespace Example1.Extension {
 			return null;
 		}
 
-		public static string UpdateSource(ModuleDocumentNode modNode, MethodDef methodDef, string newCSharpBody) // just the statements inside the method
+		public static string UpdateSource(ModuleDocumentNode modNode, MethodDef methodDef, string newCSharpBody) // just the statements inside the MethodDef (Function)
 		{
 			string source = "";
 			try {

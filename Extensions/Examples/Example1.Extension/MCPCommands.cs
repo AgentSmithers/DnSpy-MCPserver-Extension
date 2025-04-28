@@ -199,9 +199,6 @@ namespace Example1.Extension
 			}
 		}
 
-
-
-
 		[Command("Get_Loaded_Assemblies", MCPCmdDescription = "Gets all Assemblys currently loaded within dnSpyEx")]
 		public static string DumpLoadedAssemblies() {
 			try { 
@@ -219,7 +216,6 @@ namespace Example1.Extension
 				return $"Exception: " + ex.Message;
 			}
 		}
-
 
 		[Command("Namespaces_From_Assembly", MCPCmdDescription = "Dumps all unique namespaces under a given Assembly.")]
 		public static string DumpNamespacesFromAssembly(string AssemblyName) {
@@ -489,7 +485,7 @@ namespace Example1.Extension
 
 		[Command("Set_Function_Opcodes", MCPCmdDescription = @"Modifies the IL of the specified method at a given IL line index. mode = ""Overwrite"" → replaces existing instructions starting at that index mode = ""Append"" → inserts new instructions at that index, shifting old ones (IL lines are 0-based, so 0 means the very first instruction.). Example of IlOpcodes: ""Ldstr Hello, world!"",""Call System.Console::WriteLine(System.String)"",""Ret""")]
 		public static string Set_Function_Opcodes(string assemblyName, string @namespace, string className, string methodName, string[] ilOpcodes, int ilLineNumber, string mode) {
-			string DataToReturn = Global.MyAppWindow.MainWindow.Dispatcher.Invoke(() => Set_Function_Opcodes_Func(assemblyName, @namespace, className, methodName,ilOpcodes, ilLineNumber, mode)) as string;
+			string DataToReturn = Global.MyAppWindow.MainWindow.Dispatcher.Invoke(() => Set_Function_Opcodes_Func(assemblyName, @namespace, className, methodName, ilOpcodes, ilLineNumber, mode)) as string;
 			return DataToReturn;
 		}
 
@@ -594,7 +590,7 @@ namespace Example1.Extension
 		}
 
 
-		[Command("Overwrite_Full_Function_Opcodes", MCPCmdDescription = "Overwrites a whole method’s ILcode with the provided opcode lines, all other code for this function is removed. ilOpcodes argument is an array of strings Ex. \"Ldstr Hello, world!\",\r\n\"Call System.Console:WriteLine\",\r\n\"Ret\"")]
+		[Command("Overwrite_Full_Func_Opcodes", MCPCmdDescription = "Overwrites a whole method’s ILcode with the provided opcode lines, all other code for this function is removed. ilOpcodes argument is an array of strings Ex. \"Ldstr Hello, world!\",\r\n\"Call System.Console:WriteLine\",\r\n\"Ret\"")]
 		public static string Overwrite_Full_Function_Opcodes(string assemblyName, string @namespace, string className, string methodName, string[] ilOpcodes) 
 		{
 			try {
@@ -702,9 +698,6 @@ namespace Example1.Extension
 				return $"❌ Exception: {ex.Message}";
 			}
 		}
-
-
-
 
 		[Command("Update_Tabs_View", MCPCmdDescription = "Update all active tabs to reflect any changes or adjustments.")]
 		public static string RefreshAllOpenTabs() {
