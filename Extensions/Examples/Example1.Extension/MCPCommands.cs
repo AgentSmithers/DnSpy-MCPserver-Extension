@@ -4,9 +4,14 @@ using System.Diagnostics;
 using System.Drawing;
 using System.Drawing.Imaging;
 using System.Linq;
+using System.Reflection;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using dnlib.DotNet;
+using dnlib.DotNet.Emit;
+using dnSpy.Contracts.Documents.Tabs;
+using dnSpy.Contracts.Documents.Tabs.DocViewer;
 using dnSpy.Contracts.Documents.TreeView;
 using dnSpy.Contracts.TreeView;
 using ICSharpCode.TreeView;
@@ -105,6 +110,7 @@ namespace Example1.Extension
 
 				// 2) marshal the read to the TreeView's UI thread
 				var tv = Global.MyTreeView.TreeView;
+				
 				Global.MyAppWindow.MainWindow.Dispatcher.Invoke(() => {
 					selected = tv.SelectedItem;
 				});
@@ -339,6 +345,325 @@ namespace Example1.Extension
 			}
 		}
 
+		[Command("Update_Method_SourceCode", MCPCmdDescription = "Update a target Method's sourcecode using C#")]
+		public static string UpdateMethodsSourcode(string Assembly, string Namespace, string ClassName, string MethodName, string Source) {
+			try {
+				string DataToReturn = "";
+				//Debug.WriteLine("-MethodDef-");
+				ModuleDef MyModuleDef;
+				foreach (ModuleDocumentNode Modnode in Global.MyTreeView.GetAllModuleNodes().ToList()) {
+					MyModuleDef = Modnode.GetModule();
+					if (MyModuleDef.Assembly.Name == (Assembly)) {
+						Debug.WriteLine("\t" + MyModuleDef.Name);
+						//DataToReturn += MyModuleDef.Name + "\r\n";
+						var ModTypes = Modnode.TreeNode.Data.GetModule().GetTypes().OrderBy(t => t.FullName, StringComparer.OrdinalIgnoreCase).ToList();
+						foreach (TypeDef MyType in ModTypes) {
+							Debug.WriteLine("\t" + MyType.FullName);
+							if (MyType.Namespace == Namespace) {
+								if (MyType.Name == ClassName) {
+									//DataToReturn += "\t" + MyType.FullName + "\r\n";
+									List<MethodDef> Methods = MyType.Methods.OrderBy(t => t.Name.ToString(), StringComparer.OrdinalIgnoreCase).ToList();
+									foreach (MethodDef MyMethod in Methods) {
+										if (MyMethod.Name == (MethodName)) {
+											DataToReturn += TheExtension.UpdateSource(Modnode, MyMethod, Source);
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+				return DataToReturn;
+			}
+			catch (Exception ex) {
+				return $"Exception: " + ex.Message;
+			}
+		}
+
+		[Command("Get_Function_Opcodes", MCPCmdDescription = "Returns the IL opcodes of the specified method (with source line numbers)")]
+		public static string Get_Function_Opcodes(string assemblyName, string @namespace, string className, string methodName) 
+		{
+			try {
+				// scan every loaded module
+				foreach (ModuleDocumentNode modNode in Global.MyTreeView.GetAllModuleNodes()) {
+					var module = modNode.GetModule();
+					if (!string.Equals(module.Assembly.Name, assemblyName, StringComparison.OrdinalIgnoreCase))
+						continue;
+
+					// find the type
+					var type = module.GetTypes()
+									 .FirstOrDefault(t =>
+										 t.Namespace == @namespace &&
+										 t.Name == className
+									 );
+					if (type == null)
+						continue;
+
+					// find the method
+					var method = type.Methods
+									 .FirstOrDefault(m =>
+										 string.Equals(m.Name, methodName, StringComparison.OrdinalIgnoreCase)
+									 );
+					if (method == null)
+						continue;
+
+					// build the output
+					var sb = new StringBuilder();
+					sb.AppendLine($"// IL for {assemblyName}:{@namespace}.{className}.{methodName}");
+					sb.AppendLine($"// #    Offset    OpCode     Operand");
+					sb.AppendLine(new string('-', 70));
+
+					int lineNo = 0;
+					foreach (var instr in method.Body.Instructions) {
+						lineNo++;
+						// IL offset
+						var offset = instr.Offset.ToString("X4");
+						// mnemonic
+						var opName = instr.OpCode.Name;
+						// operand if present
+						var operand = instr.Operand?.ToString() ?? "";
+
+						sb.AppendLine(
+							$"{lineNo,3}   {offset,-8} {opName,-10} {operand}"
+						);
+					}
+
+					return sb.ToString();
+				}
+
+				return $"⚠️ Method {className}.{methodName} not found in assembly {assemblyName}";
+			}
+			catch (Exception ex) {
+				return $"❌ Exception: {ex.Message}";
+			}
+		}
+
+		[Command("Set_Function_Opcodes", MCPCmdDescription = @"Modifies the IL of the specified method at a given IL line index. mode = ""Overwrite"" → replaces existing instructions starting at that index mode = ""Append"" → inserts new instructions at that index, shifting old ones")]
+		public static string Set_Function_Opcodes(string assemblyName, string @namespace, string className,	string methodName, string[] ilOpcodes, int ilLineNumber, string mode)
+		{
+			try {
+				foreach (ModuleDocumentNode modNode in Global.MyTreeView.GetAllModuleNodes()) {
+					var module = modNode.GetModule();
+					if (!string.Equals(module.Assembly.Name, assemblyName, StringComparison.OrdinalIgnoreCase))
+						continue;
+
+					var type = module.GetTypes()
+									 .FirstOrDefault(t => t.Namespace == @namespace && t.Name == className);
+					if (type == null)
+						continue;
+
+					var method = type.Methods
+									 .FirstOrDefault(m => string.Equals(m.Name, methodName, StringComparison.OrdinalIgnoreCase));
+					if (method == null)
+						continue;
+
+					// Build the list of new instructions
+					var injected = new List<Instruction>();
+					var lineRe = new Regex(@"^\s*(\S+)(?:\s+(.+))?$");
+					foreach (var raw in ilOpcodes) {
+						var line = raw.Trim();
+						if (string.IsNullOrEmpty(line) || line.StartsWith("//"))
+							continue;
+
+						var m = lineRe.Match(line);
+						if (!m.Success)
+							continue;
+
+						var opName = m.Groups[1].Value;
+						var operandText = m.Groups[2].Success ? m.Groups[2].Value : "";
+
+						// resolve opcode
+						var fld = typeof(OpCodes).GetField(opName, BindingFlags.Public | BindingFlags.Static);
+						if (fld == null)
+							return $"⚠️ Unknown OpCode '{opName}'";
+						var code = (OpCode)fld.GetValue(null)!;
+
+						// create instruction
+						if (opName == "Ldstr") {
+							injected.Add(Instruction.Create(code, operandText));
+						}
+						else if (opName == "Call") {
+							var parts = operandText.Split(new[] { ':' }, 2);
+							var targetType = Type.GetType(parts[0], throwOnError: true);
+							var methodParts = parts.Length > 1
+								? parts[1].Split(',').Select(s => s.Trim()).ToArray()
+								: Array.Empty<string>();
+							var shortName = methodParts.Length > 0 ? methodParts[0] : throw new InvalidOperationException("Missing method name");
+							// find an overload by parameter count
+							var candidates = targetType.GetMethods(
+								BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Instance
+							).Where(mi => mi.Name == shortName).ToArray();
+							var chosen = candidates.FirstOrDefault(mi => mi.GetParameters().Length == methodParts.Length - 1)
+									  ?? candidates.FirstOrDefault()
+									  ?? throw new InvalidOperationException($"No method '{shortName}' found on '{parts[0]}'");
+							var iMethod = module.Import(chosen);
+							injected.Add(Instruction.Create(code, iMethod));
+						}
+						else {
+							injected.Add(Instruction.Create(code));
+						}
+					}
+
+					var instrs = method.Body.Instructions;
+					// convert 1-based line number to 0-based index
+					int idx = Math.Max(0, ilLineNumber - 1);
+					idx = Math.Min(idx, instrs.Count);
+
+					if (mode.Equals("Overwrite", StringComparison.OrdinalIgnoreCase)) {
+						// remove existing instructions equal to injected count
+						for (int i = 0; i < injected.Count && idx < instrs.Count; i++)
+							instrs.RemoveAt(idx);
+					}
+
+					// insert all new instructions at idx
+					for (int i = injected.Count - 1; i >= 0; i--)
+						instrs.Insert(idx, injected[i]);
+
+					Global.MyTreeView.TreeView.RefreshAllNodes();
+					return $"✅ {(mode.Equals("Overwrite", StringComparison.OrdinalIgnoreCase) ? "Overwrote" : "Appended")} {injected.Count} instructions at line {ilLineNumber} of {className}.{methodName}";
+				}
+
+				return $"⚠️ Method {className}.{methodName} not found in assembly {assemblyName}";
+			}
+			catch (Exception ex) {
+				return $"❌ Exception: {ex.Message}";
+			}
+		}
+
+
+		[Command("Overwrite_Full_Function_Opcodes", MCPCmdDescription = "Overwrites a whole method’s ILcode with the provided opcode lines, all other code for this function is removed. ilOpcodes argument is an array of strings Ex. \"Ldstr Hello, world!\",\r\n\"Call System.Console:WriteLine\",\r\n\"Ret\"")]
+		public static string Overwrite_Full_Function_Opcodes(string assemblyName, string @namespace, string className, string methodName, string[] ilOpcodes) 
+		{
+			try {
+				foreach (ModuleDocumentNode modNode in Global.MyTreeView.GetAllModuleNodes()) {
+					var module = modNode.GetModule();
+					if (!string.Equals(module.Assembly.Name, assemblyName, StringComparison.OrdinalIgnoreCase))
+						continue;
+
+					var type = module.GetTypes()
+									 .FirstOrDefault(t => t.Namespace == @namespace && t.Name == className);
+					if (type == null)
+						continue;
+
+					var method = type.Methods
+									 .FirstOrDefault(m => string.Equals(m.Name, methodName, StringComparison.OrdinalIgnoreCase));
+					if (method == null)
+						continue;
+
+					// Clear existing IL
+					var instrs = method.Body.Instructions;
+					instrs.Clear();
+
+					var lineRe = new Regex(@"^\s*(\S+)(?:\s+(.+))?$");
+					foreach (var raw in ilOpcodes) {
+						var line = raw.Trim();
+						if (string.IsNullOrEmpty(line) || line.StartsWith("//"))
+							continue;
+
+						var m = lineRe.Match(line);
+						if (!m.Success)
+							continue;
+
+						var opName = m.Groups[1].Value;
+						var operandText = m.Groups[2].Success ? m.Groups[2].Value : "";
+
+						// reflect the OpCode
+						var fld = typeof(OpCodes).GetField(opName,
+							BindingFlags.Public | BindingFlags.Static);
+						if (fld == null)
+							return $"⚠️ Unknown OpCode '{opName}'";
+						var code = (OpCode)fld.GetValue(null)!;
+
+						// now create the instruction
+						if (opName == "Ldstr") {
+							instrs.Add(Instruction.Create(code, operandText));
+						}
+						else if (opName == "Call") {
+							// operandText: "Namespace.Type:MethodName,arg1,arg2"
+							// split off method lookup from parameter values
+							var parts = operandText.Split(new[] { ':' }, 2);
+							var typeName = parts[0];
+							var rest = parts.Length > 1 ? parts[1] : "";
+							var methodParts = rest.Split(',').Select(s => s.Trim()).ToArray();
+							var methodShortName = methodParts[0];
+							var paramValues = methodParts.Skip(1).ToArray();
+
+							var targetType = Type.GetType(typeName, throwOnError: true);
+							// find all same-name methods:
+							var candidates = targetType.GetMethods(
+								BindingFlags.Public | BindingFlags.NonPublic |
+								BindingFlags.Static | BindingFlags.Instance
+							).Where(mi => mi.Name == methodShortName).ToArray();
+
+							MethodInfo chosen;
+							// pick overload by matching parameter count
+							var byCount = candidates.FirstOrDefault(mi =>
+								mi.GetParameters().Length == paramValues.Length);
+							if (byCount != null)
+								chosen = byCount;
+							else
+								chosen = candidates.First(); // fallback
+
+							// parse each operand to its CLR type:
+							var parsedOperands = new object[paramValues.Length];
+							var paramInfos = chosen.GetParameters();
+							for (int i = 0; i < paramValues.Length; i++) {
+								var piType = paramInfos[i].ParameterType;
+								// only string support for now:
+								if (piType == typeof(string))
+									parsedOperands[i] = paramValues[i];
+								else
+									parsedOperands[i] = Convert.ChangeType(paramValues[i], piType);
+							}
+
+							// import the MethodInfo into the module
+							var iMethod = module.Import(chosen);
+							// and build the call instruction
+							instrs.Add(Instruction.Create(code, iMethod));
+							// if non-string params you’d follow with Ldarg or Ldc_ as needed,
+							// but most user-supplied Call patches will be simple Console.WriteLine(string).
+						}
+						else {
+							instrs.Add(Instruction.Create(code));
+						}
+					}
+
+					// refresh the UI
+					Global.MyTreeView.TreeView.RefreshAllNodes();
+					return $"✅ Overwrote IL of {className}.{methodName}";
+				}
+
+				return $"⚠️ Method {className}.{methodName} not found in {assemblyName}";
+			}
+			catch (Exception ex) {
+				return $"❌ Exception: {ex.Message}";
+			}
+		}
+
+
+
+		[Command("Update_Tabs_View", MCPCmdDescription = "Update all active tabs to reflect any changes or adjustments.")]
+		public static string RefreshAllOpenTabs() {
+			try {
+				// 1) Grab a snapshot of all currently open tabs
+				var openTabs = Global.MyDocumentTabService.SortedTabs.ToList();
+				Global.MyDocumentTabService.Refresh(openTabs);
+				// 2) For each tab: remember its document, close it, then re-open it
+				//foreach (var tab in openTabs) {
+				//	IDocumentViewer doc = tab.TryGetDocumentViewer();
+				//	// close the existing tab
+				//	documentTabService.Refresh(doc.DocumentTab);
+				//	documentTabService.Close(tab);
+				//	// re-open it (activate:false so we don't steal focus)
+				//	documentTabService.Refresh(doc, activate: false);
+				//}
+				return "Document tabs refreshed";
+			}
+			catch (Exception ex) {
+				return "Exception " + ex.Message;
+			}
+		}
+
 		[Command("Rename_Namespace", MCPCmdDescription = "Renames exactly one distinct namespace across all types.")]
 		public static string RenameNamespace(string Assembly, string Old_Namespace_Name, string New_Namespace_Name) {
 			try {
@@ -467,7 +792,73 @@ namespace Example1.Extension
 			}
 		}
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 		//These Methods are not in use
+
+
+
+		public static string PatchMethodLogEntry(string assemblyName, string @namespace, string className, string methodName) {
+			try {
+				foreach (ModuleDocumentNode modNode in Global.MyTreeView.GetAllModuleNodes()) {
+					var module = modNode.GetModule();
+					if (!string.Equals(module.Assembly.Name, assemblyName, StringComparison.OrdinalIgnoreCase))
+						continue;
+
+					// find your type
+					var type = module.GetTypes()
+									 .FirstOrDefault(t => t.Namespace == @namespace && t.Name == className);
+					if (type == null)
+						continue;
+
+					// find your method
+					var method = type.Methods
+									 .FirstOrDefault(m => string.Equals(m.Name, methodName, StringComparison.OrdinalIgnoreCase));
+					if (method == null)
+						continue;
+
+					// 1) import Console.WriteLine(string) into this module
+					var writeLineRef = module.Import(
+						typeof(Console).GetMethod(nameof(Console.WriteLine), new[] { typeof(string) })
+					);
+
+					// 2) inject at the top of the method
+					IList<Instruction> instructions = method.Body.Instructions;
+					instructions.Insert(0, Instruction.Create(OpCodes.Ldstr, $"[dnSpyPatch] Entering {methodName}"));
+					instructions.Insert(1, Instruction.Create(OpCodes.Call, writeLineRef));
+
+					Global.MyTreeView.TreeView.RefreshAllNodes();
+
+					return $"✅ Successfully patched {methodName} in {className}";
+				}
+
+				return $"⚠️ Could not find method {className}.{methodName} in assembly {assemblyName}";
+			}
+			catch (Exception ex) {
+				return $"❌ Exception: {ex.Message}";
+			}
+		}
 
 		//[Command("Dump.Method.From.Class", MCPCmdDescription = "Dumps all Methods by Class within a given Namespace. Set 'DumpCode' = true to view the code within the Class as a whole.")]
 		public static string DumpClasses(string Assembly, string Namespace, string ClassName, bool DumpMethods = false, bool DumpCode = false) { //Dumps a Class and its Methods

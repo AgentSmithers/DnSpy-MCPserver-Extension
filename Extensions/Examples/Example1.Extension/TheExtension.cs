@@ -16,6 +16,11 @@ using System.Text;
 using System.Runtime.InteropServices;
 using dnSpy.Contracts.Documents.TreeView;
 using static Example1.Extension.SimpleMcpServer;
+using System.Runtime.Remoting.Contexts;
+using dnSpy.Contracts.Documents.Tabs;
+using System.Linq;
+using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis;
 
 // Each extension should export one class implementing IExtension
 
@@ -31,6 +36,7 @@ namespace Example1.Extension {
 		//[Import(AllowDefault = true)] public ToolWindowContent MyToolWindow;
 		//[Import(AllowDefault = true)] public IDocumentTreeNodeDataContext ToolWindowContentProvider; //null
 		[Import(AllowDefault = true)] public IDocumentTreeView MyTreeView;
+		[Import(AllowDefault = true)] public IDocumentTabService MyTabService;
 
 		[Import] public IDecompilerService decompilerService;
 
@@ -47,6 +53,24 @@ namespace Example1.Extension {
 		};
 
 		public static string DumpSource(ModuleDocumentNode Mod, ModuleDef methodDef) {
+			var decCtx = new DecompilationContext();
+			var sb = new StringBuilder();
+			using (var sw = new StringWriter(sb)) {
+				var indenter = new Indenter(4, 4, true);
+				var textOutput = new TextWriterDecompilerOutput(sw, indenter);
+				Mod.Context.Decompiler.Decompile(methodDef, textOutput, decCtx);  // :contentReference[oaicite:1]{index=1}
+			}
+			try {
+				Debug.WriteLine(sb.ToString());
+				return sb.ToString();
+			}
+			catch (ExternalException) {
+				// swallow
+			}
+			return null;
+		}
+
+		public static string DumpSource(ModuleDocumentNode Mod, MethodDef methodDef) {
 			var decCtx = new DecompilationContext();
 			var sb = new StringBuilder();
 			using (var sw = new StringWriter(sb)) {
@@ -83,23 +107,69 @@ namespace Example1.Extension {
 			return null;
 		}
 
-		public static string DumpSource(ModuleDocumentNode Mod, MethodDef methodDef) {
-			var decCtx = new DecompilationContext();
-			var sb = new StringBuilder();
-			using (var sw = new StringWriter(sb)) {
-				var indenter = new Indenter(4, 4, true);
-				var textOutput = new TextWriterDecompilerOutput(sw, indenter);
-				Mod.Context.Decompiler.Decompile(methodDef, textOutput, decCtx);  // :contentReference[oaicite:1]{index=1}
-			}
+		public static string UpdateSource(ModuleDocumentNode modNode, MethodDef methodDef, string newCSharpBody) // just the statements inside the method
+		{
+			string source = "";
 			try {
-				//Debug.WriteLine(sb.ToString());
-				//Clipboard.SetText(sb.ToString());
-				return sb.ToString();
+				// 1) Build a small C# source wrapper
+				//    matching the signature of methodDef:
+				var retType = methodDef.ReturnType.FullName;
+				var parameters = string.Join(", ", methodDef.Parameters.Select(p => p.Type.FullName + " " + p.Name));
+				source = $@"
+							using System;
+							public static class __Patch {{
+								public static {retType} {methodDef.Name}({parameters}) {{
+									{newCSharpBody}
+								}}
+							}}";
+
+				/*
+				using System;
+				public static class __Patch {
+					public static System.String HelloWorld(CNETTrafficFighterWeb.com.myqnapcloud.desertqnap.API ) {
+						Console.WriteLine("Hello from patched method!"); return "TestedValue";
+					}
+				}
+				*/
+
+				// 2) Compile with Roslyn into a MemoryStream
+				var tree = CSharpSyntaxTree.ParseText(source);
+				var refs = new[]
+				{
+					MetadataReference.CreateFromFile(typeof(object).Assembly.Location),
+					MetadataReference.CreateFromFile(modNode.GetModule().Location)
+				};
+				var comp = CSharpCompilation.Create(
+					"__PatchAsm",
+					new[] { tree },
+					refs,
+					new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary)
+				);
+				using var ms = new MemoryStream();
+				var result = comp.Emit(ms);
+				if (!result.Success)
+					return "❌ Compilation errors:\n" + string.Join("\n", result.Diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error)
+					.Select(d => d.ToString()));
+
+				// 3) Load compiled bytes with dnlib
+				var patchMod = ModuleDefMD.Load(ms.ToArray());
+				var patchType = patchMod.Types.First(t => t.Name == "__Patch");
+				var patchMethod = patchType.Methods.First(m => m.Name == methodDef.Name);
+
+				// 4) Copy its IL into your target
+				var body = methodDef.Body;
+				body.Instructions.Clear();
+				foreach (var instr in patchMethod.Body.Instructions)
+					body.Instructions.Add(instr);
+
+				// 5) Refresh dnSpy’s UI
+				Global.MyTreeView.TreeView.RefreshAllNodes();
+
+				return $"✅ Updated method body of {methodDef.Name}";
 			}
-			catch (ExternalException) {
-				// swallow
+			catch (Exception ex) {
+				return "Exception: Failed to update function\r\n\t\n" + source;
 			}
-			return null;
 		}
 
 		public void OnEvent(ExtensionEvent @event, object? obj) {
@@ -120,28 +190,51 @@ namespace Example1.Extension {
 							Global.MySimpleMCPServer = new SimpleMcpServer(MyMCPCommands.GetType());
 							Global.MyTreeView = MyTreeView;
 							Global.MyAppWindow = dnWindow;
+							Global.MyDocumentTabService = MyTabService;
 							Global.MySimpleMCPServer.Start();
 
 							string AssemblyName = "CNETTrafficFighterWeb";
 							string NamespaceName = "CNETTrafficFighterWeb.com.myqnapcloud.desertqnap";
 							string ClassName = "API";
-							string FunctionName = "HelloWorld";
+							string FunctionName = "HelloWorld"; //HelloWorld" //TranslateTextToAudio
 
-							var Asms = MCPCommands.DumpLoadedAssemblies(); //List all active Assemblys
-							var Namespaces = MCPCommands.DumpNamespacesFromAssembly(AssemblyName); //Dumps all Namespaces in an Assembly
-							var ClassList = MCPCommands.DumpClassesFromNamespace(AssemblyName, NamespaceName);
-							var FunctionPrototypeList = MCPCommands.DumpMethodPrototypes(AssemblyName, NamespaceName, ClassName);
-							var ClassSoureCode = MCPCommands.DumpClassCode(AssemblyName, NamespaceName, ClassName);
-							var FunctionSourceCode = MCPCommands.DumpMethodsSourcode(AssemblyName, NamespaceName, ClassName, FunctionName);
+							bool testing = true;
+							if (testing) 
+							{
+								MCPCommands.PatchMethodLogEntry(AssemblyName, NamespaceName, ClassName, FunctionName);
+								var Opcode = MCPCommands.Get_Function_Opcodes(AssemblyName, NamespaceName, ClassName, FunctionName);
 
-							var Classes = MCPCommands.DumpClasses(AssemblyName, NamespaceName, "", false); //Dumps all Classes in a Namespace
-							var ClassesWithFunctions = MCPCommands.DumpClasses(AssemblyName, NamespaceName, "", true); //Dumps all Classes in a Namespace including their function prototypes
-							var ClassWithFunctions = MCPCommands.DumpClasses(AssemblyName, NamespaceName, ClassName, true); //Dumps specific Class functions, Use the Dump Functions command
-							var ClassSourceCode = MCPCommands.DumpClasses(AssemblyName, NamespaceName, ClassName, false, true); //Dumps full source for specific class
+								var snippet = @"Console.WriteLine(""Hello from patched method!""); return ""TestedValue"";";
+								var UpdateSrc = MCPCommands.UpdateMethodsSourcode(AssemblyName, NamespaceName, ClassName, FunctionName, snippet);
 
-							var functions = MCPCommands.DumpMethods(AssemblyName, NamespaceName, ClassName, "", false); //Dumps specific Class functions
-							var function = MCPCommands.DumpMethods(AssemblyName, NamespaceName, ClassName, FunctionName, true); //Dumps source for specific function
-							
+
+								var ilLines = new[] {
+									// note: your regex skips the “offset” column, so just supply “OpCode Operand”
+									"Ldstr Hello, world!",
+									"Call System.Console:WriteLine",
+									"Ret"
+								};
+
+								//Opcode = MCPCommands.Overwrite_Full_Function_Opcodes(AssemblyName, NamespaceName, ClassName, FunctionName, ilLines);
+								//Opcode = MCPCommands.Set_Function_Opcodes(AssemblyName, NamespaceName, ClassName, FunctionName, ilLines, 10, "Appended");
+								//Opcode = MCPCommands.Set_Function_Opcodes(AssemblyName, NamespaceName, ClassName, FunctionName, ilLines, 10, "Overwrite");
+								Opcode = MCPCommands.Get_Function_Opcodes(AssemblyName, NamespaceName, ClassName, FunctionName);
+								MCPCommands.RefreshAllOpenTabs();
+								var Asms = MCPCommands.DumpLoadedAssemblies(); //List all active Assemblys
+								var Namespaces = MCPCommands.DumpNamespacesFromAssembly(AssemblyName); //Dumps all Namespaces in an Assembly
+								var ClassList = MCPCommands.DumpClassesFromNamespace(AssemblyName, NamespaceName);
+								var FunctionPrototypeList = MCPCommands.DumpMethodPrototypes(AssemblyName, NamespaceName, ClassName);
+								var ClassSoureCode = MCPCommands.DumpClassCode(AssemblyName, NamespaceName, ClassName);
+								var FunctionSourceCode = MCPCommands.DumpMethodsSourcode(AssemblyName, NamespaceName, ClassName, FunctionName);
+
+								var Classes = MCPCommands.DumpClasses(AssemblyName, NamespaceName, "", false); //Dumps all Classes in a Namespace
+								var ClassesWithFunctions = MCPCommands.DumpClasses(AssemblyName, NamespaceName, "", true); //Dumps all Classes in a Namespace including their function prototypes
+								var ClassWithFunctions = MCPCommands.DumpClasses(AssemblyName, NamespaceName, ClassName, true); //Dumps specific Class functions, Use the Dump Functions command
+								var ClassSourceCode = MCPCommands.DumpClasses(AssemblyName, NamespaceName, ClassName, false, true); //Dumps full source for specific class
+
+								var functions = MCPCommands.DumpMethods(AssemblyName, NamespaceName, ClassName, "", false); //Dumps specific Class functions
+								var function = MCPCommands.DumpMethods(AssemblyName, NamespaceName, ClassName, FunctionName, true); //Dumps source for specific function
+							}
 
 							//MyMCPCommands.DumpAllNamespaceClassesAndFunctions("CNETTrafficFighterWeb");
 

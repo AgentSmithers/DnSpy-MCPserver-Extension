@@ -9,6 +9,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Web.Script.Serialization;
+using dnSpy.Contracts.Documents.Tabs;
 using dnSpy.Contracts.Documents.TreeView;
 //https://modelcontextprotocol.io/docs/concepts/prompts
 //https://prasanthmj.github.io/ai/mcp-go/
@@ -20,6 +21,7 @@ namespace Example1.Extension {
 		public static SimpleMcpServer MySimpleMCPServer;
 		public static IDocumentTreeView MyTreeView;
 		public static dnSpy.Contracts.App.IAppWindow MyAppWindow;
+		public static IDocumentTabService MyDocumentTabService; 
 	}
 	class SimpleMcpServer {
 			private readonly HttpListener _listener = new HttpListener();
