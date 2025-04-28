@@ -5,6 +5,7 @@ using System.Drawing;
 using System.Drawing.Imaging;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
@@ -438,9 +439,13 @@ namespace Example1.Extension
 			}
 		}
 
-		[Command("Set_Function_Opcodes", MCPCmdDescription = @"Modifies the IL of the specified method at a given IL line index. mode = ""Overwrite"" → replaces existing instructions starting at that index mode = ""Append"" → inserts new instructions at that index, shifting old ones")]
-		public static string Set_Function_Opcodes(string assemblyName, string @namespace, string className, string methodName, string[] ilOpcodes, int ilLineNumber, string mode) 
-		{
+		[Command("Set_Function_Opcodes", MCPCmdDescription = @"Modifies the IL of the specified method at a given IL line index. mode = ""Overwrite"" → replaces existing instructions starting at that index mode = ""Append"" → inserts new instructions at that index, shifting old ones (IL lines are 0-based, so 0 means the very first instruction.). Example of IlOpcodes: ""Ldstr Hello, world!"",""Call System.Console::WriteLine(System.String)"",""Ret""")]
+		public static string Set_Function_Opcodes(string assemblyName, string @namespace, string className, string methodName, string[] ilOpcodes, int ilLineNumber, string mode) {
+			string DataToReturn = Global.MyAppWindow.MainWindow.Dispatcher.Invoke(() => Set_Function_Opcodes_Func(assemblyName, @namespace, className, methodName,ilOpcodes, ilLineNumber, mode)) as string;
+			return DataToReturn;
+		}
+
+		public static string Set_Function_Opcodes_Func(string assemblyName, string @namespace, string className, string methodName, string[] ilOpcodes, int ilLineNumber, string mode) {
 			try {
 				foreach (ModuleDocumentNode modNode in Global.MyTreeView.GetAllModuleNodes()) {
 					var module = modNode.GetModule();
@@ -457,23 +462,16 @@ namespace Example1.Extension
 
 					var instrs = method.Body.Instructions;
 					int existingCount = instrs.Count;
-					// Pre-flight: ensure the requested line exists
-					if (ilLineNumber < 1 || ilLineNumber > existingCount) {
-						return $"⚠️ Cannot target IL line {ilLineNumber}: method has only {existingCount} instruction{(existingCount == 1 ? "" : "s")}.";
+
+					// allow 0 through existingCount (inclusive at start, exclusive at end)
+					if (ilLineNumber < 0 || ilLineNumber > existingCount) {
+						return $"⚠️ Cannot target IL line {ilLineNumber}: method has only {existingCount} instruction{(existingCount == 1 ? "" : "s")}, so valid range is 0–{existingCount}.";
 					}
 
-					// 1) Build new IL instructions
+					// Build new IL instructions (unchanged)
 					var injected = new List<Instruction>();
-
-					// Regex to split out opcode and the rest of the line
 					var lineRe = new Regex(@"^\s*(\S+)(?:\s+(.+))?$");
-					// Regex to parse full-method signature: [retType ]Type.FullName::MethodName(param,param,...)
-					var callRe = new Regex(@"^(?:\S+\s+)?       # optional return-type prefix
-                                     (?<type>[\w\.]+):: # the CLR type name
-                                     (?<method>\w+)     # the method name
-                                     \((?<params>.*)\)  # the parameter list
-                                  $",
-										  RegexOptions.IgnorePatternWhitespace);
+					var callRe = new Regex(@"^(?:\S+\s+)?(?<type>[\w\.]+)::(?<method>\w+)\((?<params>.*)\)$");
 
 					foreach (var raw in ilOpcodes) {
 						var line = raw.Trim();
@@ -481,78 +479,63 @@ namespace Example1.Extension
 							continue;
 
 						var m = lineRe.Match(line);
-						if (!m.Success)
-							continue;
+						if (!m.Success) continue;
 
-						// Normalize opcode name to match dnlib's field names
-						var opName = m.Groups[1].Value;
-						opName = opName.Trim();
-						// Try case-insensitive lookup
-						var fld = typeof(OpCodes).GetField(
-							opName,
-							BindingFlags.Public | BindingFlags.Static | BindingFlags.IgnoreCase
-						);
+						var opName = m.Groups[1].Value.Trim();
+
+						var normalized = opName.Replace('.', '_');
+
+						var fld = typeof(OpCodes).GetField(normalized,
+										 BindingFlags.Public | BindingFlags.Static | BindingFlags.IgnoreCase);
 						if (fld == null)
 							return $"⚠️ Unknown OpCode '{opName}'";
 						var code = (OpCode)fld.GetValue(null)!;
-
 						var operandText = m.Groups[2].Success ? m.Groups[2].Value.Trim() : "";
 
-						if (string.Equals(opName, "Ldstr", StringComparison.OrdinalIgnoreCase)) {
+						if (opName.Equals("Ldstr", StringComparison.OrdinalIgnoreCase)) {
 							injected.Add(Instruction.Create(code, operandText));
 						}
-						else if (string.Equals(opName, "Call", StringComparison.OrdinalIgnoreCase)) {
+						else if (opName.Equals("Call", StringComparison.OrdinalIgnoreCase)) {
 							var cm = callRe.Match(operandText);
 							if (!cm.Success)
 								return $"⚠️ Cannot parse Call operand '{operandText}'";
 
-							// e.g. "System.Console", "WriteLine", "System.String"
 							var typeName = cm.Groups["type"].Value;
 							var shortName = cm.Groups["method"].Value;
 							var paramsSection = cm.Groups["params"].Value;
-							var paramTypeNames = string.IsNullOrWhiteSpace(paramsSection)
-								? Array.Empty<string>()
-								: paramsSection.Split(',').Select(p => p.Trim()).ToArray();
+							var paramNames = string.IsNullOrWhiteSpace(paramsSection)
+								 ? Array.Empty<string>()
+								 : paramsSection.Split(',').Select(p => p.Trim()).ToArray();
 
-							// load the CLR type and pick an overload
 							var targetType = Type.GetType(typeName, throwOnError: true);
-							var candidates = targetType.GetMethods(BindingFlags.Public | BindingFlags.NonPublic |
-																  BindingFlags.Static | BindingFlags.Instance)
-													   .Where(mi => mi.Name == shortName)
-													   .ToArray();
+							var candidates = targetType.GetMethods(
+								BindingFlags.Public | BindingFlags.NonPublic |
+								BindingFlags.Static | BindingFlags.Instance)
+								.Where(mi => mi.Name == shortName).ToArray();
 							if (candidates.Length == 0)
 								return $"⚠️ No method '{shortName}' on '{typeName}'";
 
-							var chosen = candidates.FirstOrDefault(mi =>
-											mi.GetParameters().Length == paramTypeNames.Length)
-										?? candidates[0];
-
-							// import into dnlib
+							var chosen = candidates.FirstOrDefault(mi => mi.GetParameters().Length == paramNames.Length)
+										 ?? candidates[0];
 							var iMethod = module.Import(chosen);
 							injected.Add(Instruction.Create(code, iMethod));
 						}
 						else {
-							// simple no‐operand IL
 							injected.Add(Instruction.Create(code));
 						}
 					}
 
-					// 2) Splice into the existing instruction list
-					//var instrs = method.Body.Instructions;
-					int idx = Math.Max(0, ilLineNumber - 1);
-					idx = Math.Min(idx, instrs.Count);
-
+					// Splice into IL at exactly ilLineNumber
+					int idx = ilLineNumber;
 					if (mode.Equals("Overwrite", StringComparison.OrdinalIgnoreCase)) {
 						for (int i = 0; i < injected.Count && idx < instrs.Count; i++)
 							instrs.RemoveAt(idx);
 					}
-
 					for (int i = injected.Count - 1; i >= 0; i--)
 						instrs.Insert(idx, injected[i]);
 
-					// 3) Refresh the UI
 					Global.MyTreeView.TreeView.RefreshAllNodes();
-					return $"✅ {(mode.Equals("Overwrite", StringComparison.OrdinalIgnoreCase) ? "Overwrote" : "Appended")} {injected.Count} instructions at IL line {ilLineNumber}";
+					return $"✅ {(mode.Equals("Overwrite", StringComparison.OrdinalIgnoreCase) ? "Overwrote" : "Appended")} {injected.Count} instruction{(injected.Count == 1 ? "" : "s")} at IL line {ilLineNumber}.";
 				}
 
 				return $"⚠️ Method {className}.{methodName} not found in assembly {assemblyName}";
@@ -674,8 +657,13 @@ namespace Example1.Extension
 
 
 
+
 		[Command("Update_Tabs_View", MCPCmdDescription = "Update all active tabs to reflect any changes or adjustments.")]
 		public static string RefreshAllOpenTabs() {
+			string DataToReturn = Global.MyAppWindow.MainWindow.Dispatcher.Invoke(() => RefreshAllOpenTabs_func()) as string;
+			return DataToReturn;
+		}
+		public static string RefreshAllOpenTabs_func() {
 			try {
 				// 1) Grab a snapshot of all currently open tabs
 				var openTabs = Global.MyDocumentTabService.SortedTabs.ToList();

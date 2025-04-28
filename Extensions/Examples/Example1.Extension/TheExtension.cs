@@ -176,8 +176,6 @@ namespace Example1.Extension {
 				new Thread(() => {
 					Debug.WriteLine("AppLoaded");
 
-					MCPCommands MyMCPCommands = new MCPCommands();
-					
 					if (true) 
 					{
 						dnWindow.MainWindow.Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Normal, new Action(() => {
@@ -185,7 +183,7 @@ namespace Example1.Extension {
 							if (askToOpenPage == MsgBoxButton.Yes) {			
 							}
 
-							
+							MCPCommands MyMCPCommands = new MCPCommands();
 							Global.MySimpleMCPServer = new SimpleMcpServer(MyMCPCommands.GetType());
 							Global.MyTreeView = MyTreeView;
 							Global.MyAppWindow = dnWindow;
@@ -197,7 +195,7 @@ namespace Example1.Extension {
 							string ClassName = "API";
 							string FunctionName = "HelloWorld"; //HelloWorld" //TranslateTextToAudio
 
-							bool testing = true;
+							bool testing = false;
 							if (testing) 
 							{
 								//MCPCommands.PatchMethodLogEntry(AssemblyName, NamespaceName, ClassName, FunctionName);
