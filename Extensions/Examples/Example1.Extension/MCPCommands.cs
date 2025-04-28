@@ -439,7 +439,7 @@ namespace Example1.Extension
 		}
 
 		[Command("Set_Function_Opcodes", MCPCmdDescription = @"Modifies the IL of the specified method at a given IL line index. mode = ""Overwrite"" → replaces existing instructions starting at that index mode = ""Append"" → inserts new instructions at that index, shifting old ones")]
-		public static string Set_Function_Opcodes(string assemblyName, string @namespace, string className,	string methodName, string[] ilOpcodes, int ilLineNumber, string mode)
+		public static string Set_Function_Opcodes(string assemblyName, string @namespace, string className, string methodName, string[] ilOpcodes, int ilLineNumber, string mode) 
 		{
 			try {
 				foreach (ModuleDocumentNode modNode in Global.MyTreeView.GetAllModuleNodes()) {
@@ -449,17 +449,32 @@ namespace Example1.Extension
 
 					var type = module.GetTypes()
 									 .FirstOrDefault(t => t.Namespace == @namespace && t.Name == className);
-					if (type == null)
-						continue;
+					if (type == null) continue;
 
 					var method = type.Methods
 									 .FirstOrDefault(m => string.Equals(m.Name, methodName, StringComparison.OrdinalIgnoreCase));
-					if (method == null)
-						continue;
+					if (method == null) continue;
 
-					// Build the list of new instructions
+					var instrs = method.Body.Instructions;
+					int existingCount = instrs.Count;
+					// Pre-flight: ensure the requested line exists
+					if (ilLineNumber < 1 || ilLineNumber > existingCount) {
+						return $"⚠️ Cannot target IL line {ilLineNumber}: method has only {existingCount} instruction{(existingCount == 1 ? "" : "s")}.";
+					}
+
+					// 1) Build new IL instructions
 					var injected = new List<Instruction>();
+
+					// Regex to split out opcode and the rest of the line
 					var lineRe = new Regex(@"^\s*(\S+)(?:\s+(.+))?$");
+					// Regex to parse full-method signature: [retType ]Type.FullName::MethodName(param,param,...)
+					var callRe = new Regex(@"^(?:\S+\s+)?       # optional return-type prefix
+                                     (?<type>[\w\.]+):: # the CLR type name
+                                     (?<method>\w+)     # the method name
+                                     \((?<params>.*)\)  # the parameter list
+                                  $",
+										  RegexOptions.IgnorePatternWhitespace);
+
 					foreach (var raw in ilOpcodes) {
 						var line = raw.Trim();
 						if (string.IsNullOrEmpty(line) || line.StartsWith("//"))
@@ -469,58 +484,75 @@ namespace Example1.Extension
 						if (!m.Success)
 							continue;
 
+						// Normalize opcode name to match dnlib's field names
 						var opName = m.Groups[1].Value;
-						var operandText = m.Groups[2].Success ? m.Groups[2].Value : "";
-
-						// resolve opcode
-						var fld = typeof(OpCodes).GetField(opName, BindingFlags.Public | BindingFlags.Static);
+						opName = opName.Trim();
+						// Try case-insensitive lookup
+						var fld = typeof(OpCodes).GetField(
+							opName,
+							BindingFlags.Public | BindingFlags.Static | BindingFlags.IgnoreCase
+						);
 						if (fld == null)
 							return $"⚠️ Unknown OpCode '{opName}'";
 						var code = (OpCode)fld.GetValue(null)!;
 
-						// create instruction
-						if (opName == "Ldstr") {
+						var operandText = m.Groups[2].Success ? m.Groups[2].Value.Trim() : "";
+
+						if (string.Equals(opName, "Ldstr", StringComparison.OrdinalIgnoreCase)) {
 							injected.Add(Instruction.Create(code, operandText));
 						}
-						else if (opName == "Call") {
-							var parts = operandText.Split(new[] { ':' }, 2);
-							var targetType = Type.GetType(parts[0], throwOnError: true);
-							var methodParts = parts.Length > 1
-								? parts[1].Split(',').Select(s => s.Trim()).ToArray()
-								: Array.Empty<string>();
-							var shortName = methodParts.Length > 0 ? methodParts[0] : throw new InvalidOperationException("Missing method name");
-							// find an overload by parameter count
-							var candidates = targetType.GetMethods(
-								BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Instance
-							).Where(mi => mi.Name == shortName).ToArray();
-							var chosen = candidates.FirstOrDefault(mi => mi.GetParameters().Length == methodParts.Length - 1)
-									  ?? candidates.FirstOrDefault()
-									  ?? throw new InvalidOperationException($"No method '{shortName}' found on '{parts[0]}'");
+						else if (string.Equals(opName, "Call", StringComparison.OrdinalIgnoreCase)) {
+							var cm = callRe.Match(operandText);
+							if (!cm.Success)
+								return $"⚠️ Cannot parse Call operand '{operandText}'";
+
+							// e.g. "System.Console", "WriteLine", "System.String"
+							var typeName = cm.Groups["type"].Value;
+							var shortName = cm.Groups["method"].Value;
+							var paramsSection = cm.Groups["params"].Value;
+							var paramTypeNames = string.IsNullOrWhiteSpace(paramsSection)
+								? Array.Empty<string>()
+								: paramsSection.Split(',').Select(p => p.Trim()).ToArray();
+
+							// load the CLR type and pick an overload
+							var targetType = Type.GetType(typeName, throwOnError: true);
+							var candidates = targetType.GetMethods(BindingFlags.Public | BindingFlags.NonPublic |
+																  BindingFlags.Static | BindingFlags.Instance)
+													   .Where(mi => mi.Name == shortName)
+													   .ToArray();
+							if (candidates.Length == 0)
+								return $"⚠️ No method '{shortName}' on '{typeName}'";
+
+							var chosen = candidates.FirstOrDefault(mi =>
+											mi.GetParameters().Length == paramTypeNames.Length)
+										?? candidates[0];
+
+							// import into dnlib
 							var iMethod = module.Import(chosen);
 							injected.Add(Instruction.Create(code, iMethod));
 						}
 						else {
+							// simple no‐operand IL
 							injected.Add(Instruction.Create(code));
 						}
 					}
 
-					var instrs = method.Body.Instructions;
-					// convert 1-based line number to 0-based index
+					// 2) Splice into the existing instruction list
+					//var instrs = method.Body.Instructions;
 					int idx = Math.Max(0, ilLineNumber - 1);
 					idx = Math.Min(idx, instrs.Count);
 
 					if (mode.Equals("Overwrite", StringComparison.OrdinalIgnoreCase)) {
-						// remove existing instructions equal to injected count
 						for (int i = 0; i < injected.Count && idx < instrs.Count; i++)
 							instrs.RemoveAt(idx);
 					}
 
-					// insert all new instructions at idx
 					for (int i = injected.Count - 1; i >= 0; i--)
 						instrs.Insert(idx, injected[i]);
 
+					// 3) Refresh the UI
 					Global.MyTreeView.TreeView.RefreshAllNodes();
-					return $"✅ {(mode.Equals("Overwrite", StringComparison.OrdinalIgnoreCase) ? "Overwrote" : "Appended")} {injected.Count} instructions at line {ilLineNumber} of {className}.{methodName}";
+					return $"✅ {(mode.Equals("Overwrite", StringComparison.OrdinalIgnoreCase) ? "Overwrote" : "Appended")} {injected.Count} instructions at IL line {ilLineNumber}";
 				}
 
 				return $"⚠️ Method {className}.{methodName} not found in assembly {assemblyName}";

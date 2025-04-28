@@ -200,22 +200,22 @@ namespace Example1.Extension {
 							bool testing = true;
 							if (testing) 
 							{
-								MCPCommands.PatchMethodLogEntry(AssemblyName, NamespaceName, ClassName, FunctionName);
+								//MCPCommands.PatchMethodLogEntry(AssemblyName, NamespaceName, ClassName, FunctionName);
 								var Opcode = MCPCommands.Get_Function_Opcodes(AssemblyName, NamespaceName, ClassName, FunctionName);
 
 								var snippet = @"Console.WriteLine(""Hello from patched method!""); return ""TestedValue"";";
-								var UpdateSrc = MCPCommands.Update_Methods_Sourcode(AssemblyName, NamespaceName, ClassName, FunctionName, snippet);
+								//var UpdateSrc = MCPCommands.Update_Methods_Sourcode(AssemblyName, NamespaceName, ClassName, FunctionName, snippet);
 
 
 								var ilLines = new[] {
 									// note: your regex skips the “offset” column, so just supply “OpCode Operand”
 									"Ldstr Hello, world!",
-									"Call System.Console:WriteLine",
+									"Call System.Console::WriteLine(System.String)",
 									"Ret"
 								};
 
 								//Opcode = MCPCommands.Overwrite_Full_Function_Opcodes(AssemblyName, NamespaceName, ClassName, FunctionName, ilLines);
-								//Opcode = MCPCommands.Set_Function_Opcodes(AssemblyName, NamespaceName, ClassName, FunctionName, ilLines, 10, "Appended");
+								Opcode = MCPCommands.Set_Function_Opcodes(AssemblyName, NamespaceName, ClassName, FunctionName, ilLines, 15, "Appended");
 								//Opcode = MCPCommands.Set_Function_Opcodes(AssemblyName, NamespaceName, ClassName, FunctionName, ilLines, 10, "Overwrite");
 								Opcode = MCPCommands.Get_Function_Opcodes(AssemblyName, NamespaceName, ClassName, FunctionName);
 								MCPCommands.RefreshAllOpenTabs();
