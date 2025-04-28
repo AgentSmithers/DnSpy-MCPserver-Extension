@@ -78,6 +78,13 @@ namespace Example1.Extension
 					Takes two parameters—the assembly name returned from Get_Loaded_Assemblies and a namespace returned from Namespaces_From_Assembly.
 					Example Method call: Classes_From_Namespace(""System.Runtime"", ""System.Runtime.Serialization.Json"");
 
+				GetCurrentlySelectItem()
+					Takes no parameters.
+					Returns a descriptive string for the currently selected node in the dnSpy tree view. Useful for context-aware operations.
+					Possible return formats: ""Assembly Document: [Name]"", ""Namespace: [Name]"", ""Class Type: [Name]"", ""MethodNode: [Name]"", etc., or an empty string if nothing is selected, or an error message.
+				Example Method call: GetCurrentlySelectItem()
+				Example Return: ""Class Type: String"" or ""MethodNode: Substring""
+
 				Get_Method_Prototypes(string Assembly, string Namespace, string ClassName)
 					Takes three parameters—the name of the assembly, the namespace, and the class name—and returns a newline-delimited list of all Method prototypes in that class.
 					Example Method call: Get_Method_Prototypes(""MyAssemblyName"", ""MyNamespace"", ""MyClassName"");
@@ -88,6 +95,47 @@ namespace Example1.Extension
 				Get_Method_SourceCode(string Assembly, string Namespace, string ClassName, string MethodName)
 					Takes four parameters—the assembly name, the namespace, the class name, and the Method name—and returns the full source code of the specified Method.
 					Example Method call: Get_Method_SourceCode(""MyAssemblyName"", ""MyNamespace"", ""MyClassName"", ""MyMethodName"");
+
+				Update_Method_SourceCode(string Assembly, string Namespace, string ClassName, string MethodName, string Source)
+					Takes five parameters: the assembly, namespace, class, and method names to target, plus a 'Source' string containing the C# code for the new method body.
+					Attempts to replace the target method's body with the provided source code. This involves internal decompilation and recompilation.
+					Returns a confirmation message indicating success or failure, or an error message.
+				Example Method call: Update_Method_SourceCode(""MyLib"", ""MyNamespace"", ""MyClass"", ""MyMethod"", ""Console.WriteLine(\""Hello!\""; return 1;"")
+
+				Get_Function_Opcodes(string assemblyName, string @namespace, string className, string methodName)
+					Takes four parameters: the assembly, namespace, class, and method names.
+					Returns the IL (Intermediate Language) opcodes of the specified method, formatted with line numbers, offsets, opcode names, and operands.
+				Example Method call: Get_Function_Opcodes(""System.Runtime"", ""System"", ""String"", ""IsNullOrEmpty"")
+				Example Return (excerpt):
+				// IL for System.Runtime:System.String.IsNullOrEmpty
+				// #    Offset   OpCode     Operand
+				// ----------------------------------------------------------
+				// 1    0000     ldarg.0
+				// 2    0001     brfalse.s  0008
+				...
+
+				Set_Function_Opcodes(string assemblyName, string @namespace, string className, string methodName, string[] ilOpcodes, int ilLineNumber, string mode)
+					Takes seven parameters: target identifiers (assembly, namespace, class, method), an array of strings 'ilOpcodes' representing IL instructions, a 0-based 'ilLineNumber' index, and a 'mode' string (""Overwrite"" or ""Append"").
+					Modifies the IL of the target method. ""Overwrite"" replaces instructions starting at 'ilLineNumber'. ""Append"" inserts the new instructions at 'ilLineNumber', shifting existing ones down.
+					The 'ilOpcodes' array should contain strings like ""Ldstr \""Hello\"""", ""Call System.Console::WriteLine(System.String)"", ""Ret"". Basic operand parsing is supported.
+					Returns a confirmation message or an error/exception message.
+				Example Method call: Set_Function_Opcodes(""MyLib"", ""MyNs"", ""MyClass"", ""MyMethod"", new string[] { ""nop"", ""nop"" }, 5, ""Append"")
+				Example Return: ""✅ Appended 2 instructions at IL line 5.""
+
+				Overwrite_Full_Function_Opcodes(string assemblyName, string @namespace, string className, string methodName, string[] ilOpcodes)
+					Takes five parameters: target identifiers (assembly, namespace, class, method) and an array of strings 'ilOpcodes' representing the new IL instructions.
+					Completely replaces the entire IL body of the target method with the provided opcodes. All existing instructions are removed first.
+					The 'ilOpcodes' format is the same as for Set_Function_Opcodes. Basic operand parsing is supported.
+					Returns a confirmation message or an error/exception message.
+				Example Method call: Overwrite_Full_Function_Opcodes(""MyLib"", ""MyNs"", ""MyClass"", ""MyMethod"", new string[] { ""ldstr \""Overwritten!\"""", ""call System.Console::WriteLine(System.String)"", ""ret"" })
+				Example Return: ""✅ Overwrote IL of MyClass.MyMethod""
+
+				RefreshAllOpenTabs()
+					Takes no parameters.
+					Refreshes all currently open document tabs (e.g., source code views) in dnSpy to reflect any modifications made to the underlying assemblies.
+					Returns a confirmation message or an exception message.
+				Example Method call: RefreshAllOpenTabs()
+				Example Return: ""Document tabs refreshed""
 
 				Rename_Namespace(string Assembly, string oldNamespace, string newNamespace)
 					Takes three parameters—the assembly name,the existing namespace and the new namespace—and renames exactly one distinct namespace across all types. Returns a summary of how many types were updated.
