@@ -345,8 +345,8 @@ namespace Example1.Extension
 			}
 		}
 
-		[Command("Update_Method_SourceCode", MCPCmdDescription = "Update a target Method's sourcecode using C#")]
-		public static string UpdateMethodsSourcode(string Assembly, string Namespace, string ClassName, string MethodName, string Source) {
+		[Command("Update_Method_SourceCode", MCPCmdDescription = "Update a target Method's sourcecode using C#, Source argument Example: Console.WriteLine(\"Hello from patched method!\"); return \"TestedValue\";")]
+		public static string Update_Methods_Sourcode(string Assembly, string Namespace, string ClassName, string MethodName, string Source) {
 			try {
 				string DataToReturn = "";
 				//Debug.WriteLine("-MethodDef-");

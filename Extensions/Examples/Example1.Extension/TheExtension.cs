@@ -114,14 +114,13 @@ namespace Example1.Extension {
 				// 1) Build a small C# source wrapper
 				//    matching the signature of methodDef:
 				var retType = methodDef.ReturnType.FullName;
-				var parameters = string.Join(", ", methodDef.Parameters.Select(p => p.Type.FullName + " " + p.Name));
-				source = $@"
-							using System;
-							public static class __Patch {{
-								public static {retType} {methodDef.Name}({parameters}) {{
-									{newCSharpBody}
-								}}
-							}}";
+				var parameters = string.Join(", ", methodDef.Parameters.Where(p => !p.IsHiddenThisParameter).Select(p => p.Type.FullName + " " + p.Name));
+				source = $@"using System;
+				public static class __Patch {{
+					public static {retType} {methodDef.Name}({parameters}) {{
+						{newCSharpBody}
+					}}
+				}}";
 
 				/*
 				using System;
@@ -205,7 +204,7 @@ namespace Example1.Extension {
 								var Opcode = MCPCommands.Get_Function_Opcodes(AssemblyName, NamespaceName, ClassName, FunctionName);
 
 								var snippet = @"Console.WriteLine(""Hello from patched method!""); return ""TestedValue"";";
-								var UpdateSrc = MCPCommands.UpdateMethodsSourcode(AssemblyName, NamespaceName, ClassName, FunctionName, snippet);
+								var UpdateSrc = MCPCommands.Update_Methods_Sourcode(AssemblyName, NamespaceName, ClassName, FunctionName, snippet);
 
 
 								var ilLines = new[] {
