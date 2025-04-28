@@ -19,7 +19,7 @@ In alternative you may pull down the latest dnSpyEx then rename the Extension sa
 
 # Supported commands
 Currently readonly commands are supported to enumerate active namespaces, classes and functions by the AI. Plans are in the works to allow the AI to make interactive adjustments to the decompiled assemblies.
-
+```
 Get_Selected_Node - Gets the currently selected node within dnSpyEx
 Get_Loaded_Assemblies - Gets all Assemblys currently loaded within dnSpyEx
 Namespaces_From_Assembly - Dumps all unique namespaces under a given Assembly
@@ -35,7 +35,7 @@ Rename_Namespace - Renames exactly one distinct namespace across all types
 Rename_Class - Renames a specific class within a given Namespace
 Rename_Method - Renames a specific Methods by Class within a given Namespace
 These commands allow you to inspect and modify .NET assemblies loaded in dnSpyEx, including viewing and editing source code, IL code, and performing various renaming operations.
-
+```
 # Once the extension is loaded
 A messagebox will appear allowing you a chance to attach your debugger if nessessary
 ![image](https://github.com/user-attachments/assets/f7a53b4c-e273-435e-9098-d92eb54fa84e)
