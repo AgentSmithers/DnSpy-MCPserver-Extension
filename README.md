@@ -3,7 +3,7 @@ This is a dnSpy MCPServer Extension for the use of automated AI .NET reverse eng
 The Example1.Extension has been updated to include the MCPServer logic with a few starting function to feed the decompiled code back to the LLM.
 This is an ongoing project and I plan to continue to add commands as time persist.
 
-To execute the server, run as Administrator so the the Http server may Listen on +:3001.
+To execute the server, run as Administrator so the the Http server may Listen on +:3001 (release is currently set to 3003).
 The following command will suffice:
 cd {dnspy directory}
 dnspy.exe --extension-directory {Path to extension}
