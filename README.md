@@ -3,7 +3,7 @@ This is a dnSpy MCPServer Extension for the use of automated AI .NET reverse eng
 The Example1.Extension has been updated to include the MCPServer logic with a few starting function to feed the decompiled code back to the LLM.
 This is an ongoing project and I plan to continue to add commands as time persist.
 
-To execute the server, run as Administrator so the the Http server may Listen on +:3001.
+To execute the server, run as Administrator so the the Http server may Listen on +:3001 (release is currently set to 3003).
 The following command will suffice:
 cd {dnspy directory}
 dnspy.exe --extension-directory {Path to extension}
@@ -14,6 +14,11 @@ In alternative you may copy the release into the Extension folder within the dnS
 # Modifying the project
 The easiest way to modify this project is to pull the full respository and navigate to the Example1 Extension. In there is the modified code.
 Make your adjustments, compile then use the --extension-directory to point to your projects extension path.
+
+Ensure to compile the primary DnSpy Soultion so that the dependancies for "AgentSmithers DnSpyEx MCPServer" can use them for its own build. (Note: When compiling DnSpyEx you may have approx. ~20 errors, this will not prevent the 45 Projects from compiling)
+<img width="846" alt="image" src="https://github.com/user-attachments/assets/4d9269fa-ab0e-4392-8042-f79b31795e43" />
+<img width="991" alt="image" src="https://github.com/user-attachments/assets/57e708b3-05e9-4edd-8b72-53c0850c5304" />
+
 
 In alternative you may pull down the latest dnSpyEx then rename the Extension sample folder to another name and bring the modified extension folder over to recompile.
 
