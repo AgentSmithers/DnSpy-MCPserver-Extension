@@ -74,6 +74,10 @@ namespace Example1.Extension
 				System.Text
 				System.Xml
 
+				Get_Global_Namespaces()
+					Takes no parameters.
+					Returns a newline-delimited list of all types in the global namespace (i.e., no explicit namespace).
+
 				Classes_From_Namespace(string assemblyName, string namespaceName)
 					Takes two parameters—the assembly name returned from Get_Loaded_Assemblies and a namespace returned from Namespaces_From_Assembly.
 					Example Method call: Classes_From_Namespace(""System.Runtime"", ""System.Runtime.Serialization.Json"");
@@ -199,6 +203,35 @@ namespace Example1.Extension
 			}
 		}
 
+		[Command("Get_Global_Namespaces", MCPCmdDescription = "List all types in the global namespace (i.e., no explicit namespace).")]
+		public static string Get_Global_Namespaces() {
+			try {
+				var sb = new StringBuilder();
+				Debug.WriteLine("- Global Namespace Types -");
+
+				// Gather all TypeDefs from all modules
+				var globalTypes = Global.MyTreeView
+					.GetAllModuleNodes()
+					.SelectMany(mod => mod.TreeNode.Data.GetModule().GetTypes())
+					.Where(t => string.IsNullOrEmpty(t.Namespace))
+					.OrderBy(t => t.FullName);
+
+				// Output each type
+				foreach (var type in globalTypes) {
+					Debug.WriteLine($"	{type.FullName}");
+					sb.AppendLine(type.FullName);
+				}
+
+				if (sb.Length == 0) {
+					return "No types found in the global namespace.";
+				}
+				return sb.ToString();
+			}
+			catch (Exception ex) {
+				return $"Exception: " + ex.Message;
+			}
+		}
+
 		[Command("Get_Loaded_Assemblies", MCPCmdDescription = "Gets all Assemblys currently loaded within dnSpyEx")]
 		public static string DumpLoadedAssemblies() {
 			try { 
@@ -279,6 +312,45 @@ namespace Example1.Extension
 			}
 		}
 
+
+		[Command("Get_Class_Sourcecode", MCPCmdDescription = "Dumps a target Class sourcecode")]
+		public static string DumpClassCode(string Assembly, string Namespace, string ClassName) { //Dumps a Classes sourcecode
+			try {
+				string DataToReturn = "";
+				//Debug.WriteLine("-MethodDef-");
+
+				ModuleDef MyModuleDef;
+				foreach (ModuleDocumentNode Modnode in Global.MyTreeView.GetAllModuleNodes().ToList()) {
+					MyModuleDef = Modnode.GetModule();
+					if (MyModuleDef.Assembly.Name == (Assembly)) {
+						Debug.WriteLine("\t" + MyModuleDef.Name); //GemBox.Spreadsheet.dll
+																  //Debug.WriteLine("\t" + Modnode.GetModule().Name);
+																  //DataToReturn += Modnode.GetModule().Name + "\r\n";
+
+						var ModNode = Modnode.TreeNode.Data.GetModuleNode();
+						var ModTypes = Modnode.TreeNode.Data.GetModule().GetTypes().OrderBy(t => t.FullName, StringComparer.OrdinalIgnoreCase).ToList();
+						//DataToReturn += "\t" + DumpNode(Modnode.TreeNode, 1);
+						foreach (TypeDef MyType in ModTypes) {
+							Debug.WriteLine("\t" + MyType.FullName);
+							if (MyType.Namespace == Namespace) {
+								if (MyType.Name == ClassName) {
+									if (string.IsNullOrEmpty(Namespace) ? MyType.FullName == ClassName : MyType.FullName.StartsWith(Namespace + "." + ClassName)) { //+MethodName
+																																									//Debug.WriteLine(TheExtension.DumpSource(Modnode, MyType)); //The class as a whole
+										DataToReturn += TheExtension.DumpSource(Modnode, MyType);
+									}
+								}
+							}
+						}
+					}
+				}
+				return DataToReturn;
+			}
+			catch (Exception ex) {
+				return $"Exception: " + ex.Message;
+			}
+		}
+
+		/*
 		[Command("Get_Class_Sourcecode", MCPCmdDescription = "Dumps a target Class sourcecode")]
 		public static string DumpClassCode(string Assembly, string Namespace, string ClassName) { //Dumps a Classes sourcecode
 			try {
@@ -315,6 +387,7 @@ namespace Example1.Extension
 				return $"Exception: " + ex.Message;
 			}
 		}
+		*/
 
 		[Command("Get_Method_Prototypes", MCPCmdDescription = "List all Method prototypes from a givin Class within a given Namespace.")]
 		public static string DumpMethodPrototypes(string Assembly, string Namespace, string ClassName) {
