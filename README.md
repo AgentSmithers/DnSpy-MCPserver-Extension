@@ -4,10 +4,15 @@ The Example1.Extension has been updated to include the MCPServer logic with a fe
 This is an ongoing project and I plan to continue to add commands as time persist.
 
 To execute the server, run as Administrator so the the Http server may Listen on +:3001 (release is currently set to 3003).
+
 The following command will suffice:
+
 cd {dnspy directory}
+
 dnspy.exe --extension-directory {Path to extension}
+
 Ex. dnspy.exe --extension-directory "C:\repos\dnSpy\Extensions\Examples\Example1.Extension\bin\Debug\net48"
+
 Example 2 in CMD: C:\Users\user>"C:\Users\user\source\repos\DnSpy-MCPserver-Extension\dnSpy\dnSpy\bin\Debug\net48\dnspy.exe" --extension-directory "C:\Users\user\source\repos\DnSpy-MCPserver-Extension\dnSpy\dnSpy\bin\Debug\net48\Extensions"
 
 In alternative you may copy the release into the Extension folder within the dnSpy\Extensions\AgentSmithersMCPServer path.
