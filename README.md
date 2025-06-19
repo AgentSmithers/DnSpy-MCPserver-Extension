@@ -8,8 +8,9 @@ The following command will suffice:
 cd {dnspy directory}
 dnspy.exe --extension-directory {Path to extension}
 Ex. dnspy.exe --extension-directory "C:\repos\dnSpy\Extensions\Examples\Example1.Extension\bin\Debug\net48"
+Example 2 in CMD: C:\Users\user>"C:\Users\user\source\repos\DnSpy-MCPserver-Extension\dnSpy\dnSpy\bin\Debug\net48\dnspy.exe" --extension-directory "C:\Users\user\source\repos\DnSpy-MCPserver-Extension\dnSpy\dnSpy\bin\Debug\net48\Extensions"
 
-In alternative you may copy the release into the Extension folder within the dnSpy\Extensions\AgnetSmithersMCPServer path.
+In alternative you may copy the release into the Extension folder within the dnSpy\Extensions\AgentSmithersMCPServer path.
 
 # Modifying the project
 The easiest way to modify this project is to pull the full respository and navigate to the Example1 Extension. In there is the modified code.
