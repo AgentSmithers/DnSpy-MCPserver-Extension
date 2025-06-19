@@ -19,6 +19,7 @@
 
 using System.Windows;
 using System.Windows.Controls;
+using System.Text;
 
 namespace dnSpy.AsmEditor.MethodBody {
 	sealed partial class MethodBodyControl : UserControl {
@@ -61,6 +62,20 @@ namespace dnSpy.AsmEditor.MethodBody {
 			localsListHelper.OnDataContextChanged(data);
 			instructionsListHelper.OnDataContextChanged(data);
 			exceptionHandlersListHelper.OnDataContextChanged(data);
+		}
+
+		void CopyAllInstructions_Click(object sender, RoutedEventArgs e)
+		{
+			var data = DataContext as MethodBodyVM;
+			if (data?.CilBodyVM?.InstructionsListVM is not { } instructions)
+				return;
+
+			var sb = new System.Text.StringBuilder();
+			foreach (var instruction in instructions)
+			{
+				sb.AppendLine(instruction.ToString());
+			}
+			Clipboard.SetText(sb.ToString());
 		}
 	}
 }
