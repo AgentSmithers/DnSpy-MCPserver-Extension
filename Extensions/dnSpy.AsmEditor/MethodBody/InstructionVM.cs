@@ -112,7 +112,7 @@ namespace dnSpy.AsmEditor.MethodBody {
 		}
 
 		// Create an Instruction that we can use to call useful Instruction methods
-		Instruction GetTempInstruction() {
+		public Instruction GetTempInstruction() {
 			var opCode = Code.ToOpCode();
 			switch (InstructionOperandVM.InstructionOperandType) {
 			case InstructionOperandType.None:

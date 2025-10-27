@@ -126,7 +126,7 @@ namespace Example1.Extension
 				Example Method call: Set_Function_Opcodes(""MyLib"", ""MyNs"", ""MyClass"", ""MyMethod"", new string[] { ""nop"", ""nop"" }, 5, ""Append"")
 				Example Return: ""✅ Appended 2 instructions at IL line 5.""
 
-				Overwrite_Full_Function_Opcodes(string assemblyName, string @namespace, string className, string methodName, string[] ilOpcodes)
+				Overwrite_Full_Func_Opcodes(string assemblyName, string @namespace, string className, string methodName, string[] ilOpcodes)
 					Takes five parameters: target identifiers (assembly, namespace, class, method) and an array of strings 'ilOpcodes' representing the new IL instructions.
 					Completely replaces the entire IL body of the target method with the provided opcodes. All existing instructions are removed first.
 					The 'ilOpcodes' format is the same as for Set_Function_Opcodes. Basic operand parsing is supported.
@@ -152,6 +152,10 @@ namespace Example1.Extension
 				Rename_Method(string Assembly, string Namespace, string ClassName, string MethodName, string newName)
 					Takes five parameters—the assembly name,the namespace, the class name, the current Method name (or substring match), and the new name—and renames a specific Method in the given class. Returns a confirmation message.
 					Example Method call: Rename_Method(""MyAssemblyName"", ""MyNamespace"", ""MyClassName"", ""OldMethodName"", ""NewMethodName"");
+
+				Get_Global_Namespaces()
+					Takes no parameters.
+					Returns a newline-delimited list of all types in the global namespace (i.e., no explicit namespace).
 			";
 		}
 
@@ -172,7 +176,7 @@ namespace Example1.Extension
 				if (selected == null)
 					return string.Empty;
 
-				// 4) if it’s a DocumentTreeNodeData (or one of its sub-interfaces), pull out a name
+				// 4) if it's a DocumentTreeNodeData (or one of its sub-interfaces), pull out a name
 				if (selected is DocumentTreeNodeData docNode) {
 					// e.g. for methods/types you might want the metadata name: //"dnSpy.Documents.TreeView.MethodNodeImpl"}
 					if (docNode is dnSpy.Contracts.Documents.TreeView.AssemblyDocumentNode tn)
@@ -283,6 +287,35 @@ namespace Example1.Extension
 			}
 		}
 
+		[Command("Get_Global_Namespaces", MCPCmdDescription = "List all types in the global namespace (i.e., no explicit namespace).")]
+		public static string Get_Global_Namespaces() {
+			try {
+				var sb = new StringBuilder();
+				Debug.WriteLine("- Global Namespace Types -");
+
+				// Gather all TypeDefs from all modules
+				var globalTypes = Global.MyTreeView
+					.GetAllModuleNodes()
+					.SelectMany(mod => mod.TreeNode.Data.GetModule().GetTypes())
+					.Where(t => string.IsNullOrEmpty(t.Namespace))
+					.OrderBy(t => t.FullName);
+
+				// Output each type
+				foreach (var type in globalTypes) {
+					Debug.WriteLine($"	{type.FullName}");
+					sb.AppendLine(type.FullName);
+				}
+
+				if (sb.Length == 0) {
+					return "No types found in the global namespace.";
+				}
+				return sb.ToString();
+			}
+			catch (Exception ex) {
+				return $"Exception: " + ex.Message;
+			}
+		}
+
 		[Command("Classes_From_Namespace", MCPCmdDescription = "List all Classes under a given Namespace.")]
 		public static string DumpClassesFromNamespace(string AssemblyName, string Namespace) {
 			try { 
@@ -372,7 +405,7 @@ namespace Example1.Extension
 							Debug.WriteLine("\t" + MyType.FullName);
 							if (MyType.Namespace == Namespace) {
 								if (MyType.Name == ClassName) {
-									if (MyType.FullName.StartsWith(Namespace + "." + ClassName)) { //+MethodName
+									if (string.IsNullOrEmpty(Namespace) ? MyType.FullName == ClassName : MyType.FullName.StartsWith(Namespace + "." + ClassName)) { //+MethodName
 																								   //Debug.WriteLine(TheExtension.DumpSource(Modnode, MyType)); //The class as a whole
 										DataToReturn += TheExtension.DumpSource(Modnode, MyType);
 									}
@@ -662,9 +695,14 @@ namespace Example1.Extension
 			}
 		}
 
-
-		[Command("Overwrite_Full_Func_Opcodes", MCPCmdDescription = "Overwrites a whole method’s ILcode with the provided opcode lines, all other code for this function is removed. ilOpcodes argument is an array of strings Ex. \"Ldstr Hello, world!\",\r\n\"Call System.Console:WriteLine\",\r\n\"Ret\"")]
+		[Command("Overwrite_Full_Func_Opcodes", MCPCmdDescription = "Overwrites a whole method's ILcode with the provided opcode lines, all other code for this function is removed. ilOpcodes argument is an array of strings Ex. \"Ldstr Hello, world!\",\r\n\"Call System.Console:WriteLine\",\r\n\"Ret\"")]
 		public static string Overwrite_Full_Function_Opcodes(string assemblyName, string @namespace, string className, string methodName, string[] ilOpcodes) 
+		{
+			string DataToReturn = Global.MyAppWindow.MainWindow.Dispatcher.Invoke(() => Overwrite_Full_Function_Opcodes_Func(assemblyName, @namespace, className, methodName, ilOpcodes)) as string;
+			return DataToReturn;
+		}
+
+		public static string Overwrite_Full_Function_Opcodes_Func(string assemblyName, string @namespace, string className, string methodName, string[] ilOpcodes) 
 		{
 			try {
 				foreach (ModuleDocumentNode modNode in Global.MyTreeView.GetAllModuleNodes()) {
@@ -700,8 +738,9 @@ namespace Example1.Extension
 						var operandText = m.Groups[2].Success ? m.Groups[2].Value : "";
 
 						// reflect the OpCode
-						var fld = typeof(OpCodes).GetField(opName,
-							BindingFlags.Public | BindingFlags.Static);
+						var normalizedOpName = opName.Replace('.', '_');
+						var fld = typeof(OpCodes).GetField(normalizedOpName,
+							BindingFlags.Public | BindingFlags.Static | BindingFlags.IgnoreCase);
 						if (fld == null)
 							return $"⚠️ Unknown OpCode '{opName}'";
 						var code = (OpCode)fld.GetValue(null)!;
@@ -752,7 +791,7 @@ namespace Example1.Extension
 							var iMethod = module.Import(chosen);
 							// and build the call instruction
 							instrs.Add(Instruction.Create(code, iMethod));
-							// if non-string params you’d follow with Ldarg or Ldc_ as needed,
+							// if non-string params you'd follow with Ldarg or Ldc_ as needed,
 							// but most user-supplied Call patches will be simple Console.WriteLine(string).
 						}
 						else {
@@ -926,33 +965,6 @@ namespace Example1.Extension
 			}
 		}
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-		//These Methods are not in use
-
-
-
 		public static string PatchMethodLogEntry(string assemblyName, string @namespace, string className, string methodName) {
 			try {
 				foreach (ModuleDocumentNode modNode in Global.MyTreeView.GetAllModuleNodes()) {
@@ -1087,8 +1099,7 @@ namespace Example1.Extension
 		/// <summary>
 		/// Walks *any* ITreeNode subtree, printing out:
 		//   • Module.Name (if any)
-		//   • Assembly/Document/Module path names
-		/// • “MethodDef” if there’s a Method at that node
+		/// • "MethodDef" if there's a Method at that node
 		/// and recurses into children with increasing indentation.
 		/// </summary>
 		public string DumpAllNodeClassesAndMethodsOld(ITreeNode node, int indentLevel = 0) {

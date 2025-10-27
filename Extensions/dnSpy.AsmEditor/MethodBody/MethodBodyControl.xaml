@@ -89,6 +89,7 @@
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
                         <CheckBox Grid.Column="0" Margin="5 0 0 0" IsChecked="{Binding CilBodyVM.KeepOldMaxStack}" Content="{x:Static p:dnSpy_AsmEditor_Resources.MethodBody_KeepOldMaxStack}" ToolTip="{x:Static p:dnSpy_AsmEditor_Resources.MethodBody_KeepOldMaxStack_ToolTip}" />
                         <CheckBox Grid.Column="1" Margin="5 0 0 0" IsChecked="{Binding CilBodyVM.InitLocals}" Content="{x:Static p:dnSpy_AsmEditor_Resources.MethodBody_InitLocals}" />
@@ -100,6 +101,7 @@
                         <TextBox Grid.Column="7" Margin="5 0 0 0" Name="maxStackTextBox" Text="{Binding CilBodyVM.MaxStack.StringValue, ValidatesOnDataErrors=True, ValidatesOnExceptions=True, UpdateSourceTrigger=PropertyChanged}" />
                         <Label Grid.Column="8" Margin="5 0 0 0" Target="{Binding ElementName=localVarSigTokTextBox}" Content="_LocalVarSigTok" />
                         <TextBox Grid.Column="9" Margin="5 0 0 0" Name="localVarSigTokTextBox" Text="{Binding CilBodyVM.LocalVarSigTok.StringValue, ValidatesOnDataErrors=True, ValidatesOnExceptions=True, UpdateSourceTrigger=PropertyChanged}" />
+                        <Button Grid.Column="10" Margin="5 0 0 0" Content="Copy All Instructions" Click="CopyAllInstructions_Click" />
                     </Grid>
                     <!-- Use recycling mode or the virtualizer will free the ListViewItems only a
                     few seconds after letting go of the scroll bar. That will result in a few secs
