@@ -152,10 +152,6 @@ namespace Example1.Extension
 				Rename_Method(string Assembly, string Namespace, string ClassName, string MethodName, string newName)
 					Takes five parameters—the assembly name,the namespace, the class name, the current Method name (or substring match), and the new name—and renames a specific Method in the given class. Returns a confirmation message.
 					Example Method call: Rename_Method(""MyAssemblyName"", ""MyNamespace"", ""MyClassName"", ""OldMethodName"", ""NewMethodName"");
-
-				Get_Global_Namespaces()
-					Takes no parameters.
-					Returns a newline-delimited list of all types in the global namespace (i.e., no explicit namespace).
 			";
 		}
 
@@ -204,35 +200,6 @@ namespace Example1.Extension
 			}
 			catch (Exception ex) {
 				return $"Exception: {ex.Message}";
-			}
-		}
-
-		[Command("Get_Global_Namespaces", MCPCmdDescription = "List all types in the global namespace (i.e., no explicit namespace).")]
-		public static string Get_Global_Namespaces() {
-			try {
-				var sb = new StringBuilder();
-				Debug.WriteLine("- Global Namespace Types -");
-
-				// Gather all TypeDefs from all modules
-				var globalTypes = Global.MyTreeView
-					.GetAllModuleNodes()
-					.SelectMany(mod => mod.TreeNode.Data.GetModule().GetTypes())
-					.Where(t => string.IsNullOrEmpty(t.Namespace))
-					.OrderBy(t => t.FullName);
-
-				// Output each type
-				foreach (var type in globalTypes) {
-					Debug.WriteLine($"	{type.FullName}");
-					sb.AppendLine(type.FullName);
-				}
-
-				if (sb.Length == 0) {
-					return "No types found in the global namespace.";
-				}
-				return sb.ToString();
-			}
-			catch (Exception ex) {
-				return $"Exception: " + ex.Message;
 			}
 		}
 
