@@ -8,7 +8,7 @@ using System.Reflection;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
-using System.Web.Script.Serialization;
+using System.Text.Json;
 using dnSpy.Contracts.Documents.Tabs;
 using dnSpy.Contracts.Documents.TreeView;
 //https://modelcontextprotocol.io/docs/concepts/prompts
@@ -262,7 +262,8 @@ namespace Example1.Extension {
 
 
 						// --- Process Request Body (JSON RPC) ---
-						Dictionary<string, object> json = null;
+						// --- Process Request Body (JSON RPC) ---
+						
 						object rpcId = null; // Store ID for responses/errors
 						string method = null;
 
@@ -270,66 +271,73 @@ namespace Example1.Extension {
 							if (string.IsNullOrWhiteSpace(jsonBody)) {
 								throw new JsonException("Request body is empty or whitespace.");
 							}
-							// Use JavaScriptSerializer as per existing code
-							json = _jsonSerializer.Deserialize<Dictionary<string, object>>(jsonBody);
+							
+                            using (JsonDocument doc = JsonDocument.Parse(jsonBody))
+                            {
+                                JsonElement root = doc.RootElement;
 
-							if (json == null) {
-								throw new JsonException("Failed to deserialize JSON body.");
-							}
+    							// Extract essential JSON RPC fields
+                                if (root.TryGetProperty("id", out JsonElement idElement)) {
+                                     // Store ID as object (long or string)
+                                     if (idElement.ValueKind == JsonValueKind.Number) {
+                                         if (idElement.TryGetInt64(out long l)) rpcId = l;
+                                         else rpcId = idElement.GetDouble(); 
+                                     }
+                                     else if (idElement.ValueKind == JsonValueKind.String) rpcId = idElement.GetString();
+                                }
 
-							// Extract essential JSON RPC fields
-							json.TryGetValue("id", out rpcId); // Can be string or number, keep as object
-							if (!json.TryGetValue("method", out object methodObj) || !(methodObj is string)) {
-								// Send error via SSE if ID is known, otherwise just log
-								var errorMsg = "Invalid JSON RPC: Missing or invalid 'method'.";
-								Console.WriteLine($"Error processing request for session {sessionId}: {errorMsg}");
-								if (rpcId != null) SendSseError(sessionId, rpcId, -32600, errorMsg); // Invalid Request
-								return; // Stop processing
-							}
-							method = (string)methodObj;
+    							if (!root.TryGetProperty("method", out JsonElement methodElement) || methodElement.ValueKind != JsonValueKind.String) {
+    								// Send error via SSE if ID is known, otherwise just log
+    								var errorMsg = "Invalid JSON RPC: Missing or invalid 'method'.";
+    								Console.WriteLine($"Error processing request for session {sessionId}: {errorMsg}");
+    								if (rpcId != null) SendSseError(sessionId, rpcId, -32600, errorMsg); // Invalid Request
+    								return; // Stop processing
+    							}
+    							method = methodElement.GetString();
 
-							if (pDebug) { Console.WriteLine($"RPC Call | Session: {sessionId}, ID: {rpcId}, Method: {method}"); }
+    							if (pDebug) { Console.WriteLine($"RPC Call | Session: {sessionId}, ID: {rpcId}, Method: {method}"); }
 
-							// --- Method Dispatching ---
-							if (method == "rpc.discover") // Legacy? Or just basic tool list? Treat like tools/list.
-							{
-								HandleToolsList(sessionId, rpcId); // Use helper
-							}
-							else if (method == "initialize") {
-								HandleInitialize(sessionId, rpcId, json); // Use helper
-							}
-							else if (method == "notifications/initialized") {
-								if (pDebug) { Console.WriteLine($"Notification 'initialized' received for session {sessionId}."); }
-								// No response needed for notifications
-							}
-							else if (method == "tools/list") {
-								HandleToolsList(sessionId, rpcId); // Use helper
-							}
-							else if (method == "tools/call") {
-								HandleToolCall(sessionId, rpcId, json); // Use helper
-							}
-							// --- *** NEW HANDLERS START HERE *** ---
-							else if (method == "prompts/list") {
-								HandlePromptsList(sessionId, rpcId); // Use helper
-							}
-							else if (method == "prompts/get") {
-								HandlePromptsGet(sessionId, rpcId, json); // Use helper
-							}
-							else if (method == "resources/list") {
-								HandleResourcesList(sessionId, rpcId); // Use helper
-							}
-							// --- *** NEW HANDLERS END HERE *** ---
-							else if (_commands.TryGetValue(method, out var methodInfo)) // Check for legacy direct command call
-							{
-								// Handle legacy direct calls if needed, otherwise treat as unknown
-								Console.WriteLine($"Warning: Received legacy-style direct command call '{method}' for session {sessionId}. Consider using 'tools/call'.");
-								// Send Method Not Found or handle if intended
-								SendSseError(sessionId, rpcId, -32601, $"Direct command calls are deprecated. Use 'tools/call' for method '{method}'.");
-							}
-							else {
-								Console.WriteLine($"Unknown method '{method}' received for session {sessionId}");
-								SendSseError(sessionId, rpcId, -32601, $"Method not found: {method}"); // Method Not Found
-							}
+    							// --- Method Dispatching ---
+    							if (method == "rpc.discover") // Legacy? Or just basic tool list? Treat like tools/list.
+    							{
+    								HandleToolsList(sessionId, rpcId); // Use helper
+    							}
+    							else if (method == "initialize") {
+    								HandleInitialize(sessionId, rpcId, root); // Use helper
+    							}
+    							else if (method == "notifications/initialized") {
+    								if (pDebug) { Console.WriteLine($"Notification 'initialized' received for session {sessionId}."); }
+    								// No response needed for notifications
+    							}
+    							else if (method == "tools/list") {
+    								HandleToolsList(sessionId, rpcId); // Use helper
+    							}
+    							else if (method == "tools/call") {
+    								HandleToolCall(sessionId, rpcId, root); // Use helper
+    							}
+    							// --- *** NEW HANDLERS START HERE *** ---
+    							else if (method == "prompts/list") {
+    								HandlePromptsList(sessionId, rpcId); // Use helper
+    							}
+    							else if (method == "prompts/get") {
+    								HandlePromptsGet(sessionId, rpcId, root); // Use helper
+    							}
+    							else if (method == "resources/list") {
+    								HandleResourcesList(sessionId, rpcId); // Use helper
+    							}
+    							// --- *** NEW HANDLERS END HERE *** ---
+    							else if (_commands.TryGetValue(method, out var methodInfo)) // Check for legacy direct command call
+    							{
+    								// Handle legacy direct calls if needed, otherwise treat as unknown
+    								Console.WriteLine($"Warning: Received legacy-style direct command call '{method}' for session {sessionId}. Consider using 'tools/call'.");
+    								// Send Method Not Found or handle if intended
+    								SendSseError(sessionId, rpcId, -32601, $"Direct command calls are deprecated. Use 'tools/call' for method '{method}'.");
+    							}
+    							else {
+    								Console.WriteLine($"Unknown method '{method}' received for session {sessionId}");
+    								SendSseError(sessionId, rpcId, -32601, $"Method not found: {method}"); // Method Not Found
+    							}
+                            }
 						}
 						catch (JsonException jsonEx) {
 							Console.WriteLine($"JSON Error processing request for session {sessionId}: {jsonEx.Message}");
@@ -470,7 +478,7 @@ namespace Example1.Extension {
 							id = (string)null, // No ID for spontaneous discover usually
 							result = toolList // Or maybe a different structure
 						};
-						var json = _jsonSerializer.Serialize(legacyResponse);
+						var json = JsonSerializer.Serialize(legacyResponse, _jsonOptions);
 						var buffer = Encoding.UTF8.GetBytes(json);
 						ctx.Response.ContentType = "application/json; charset=utf-8";
 						ctx.Response.ContentLength64 = buffer.Length;
@@ -499,7 +507,7 @@ namespace Example1.Extension {
 
 			// --- Additions: Specific MCP Method Handlers ---
 
-			private void HandleInitialize(string sessionId, object id, Dictionary<string, object> json) {
+			private void HandleInitialize(string sessionId, object id, JsonElement json) {
 				// Process clientInfo or capabilities from json["params"] if needed
 				// Example: var clientInfo = (json["params"] as Dictionary<string, object>)?["clientInfo"];
 
@@ -626,32 +634,32 @@ namespace Example1.Extension {
 				SendSseResult(sessionId, id, new { tools = toolsList.ToArray() });
 			}
 
-			private void HandleToolCall(string sessionId, object id, Dictionary<string, object> json) {
+			private void HandleToolCall(string sessionId, object id, JsonElement json) {
 				string toolName = null;
-				Dictionary<string, object> arguments = null;
+				JsonElement arguments = default;
 				string resultText = "An error occurred processing the tool call."; // Default error text
 				bool isError = true; // Default to error
 
 				try {
 					// --- Parse tool call parameters ---
-					if (!json.TryGetValue("params", out object paramsObj) || !(paramsObj is Dictionary<string, object> paramsDict)) {
-						throw new ArgumentException("Invalid or missing 'params' object for tools/call");
-					}
+                    if (!json.TryGetProperty("params", out JsonElement paramsElement) || paramsElement.ValueKind != JsonValueKind.Object) {
+                        throw new ArgumentException("Invalid or missing 'params' object for tools/call");
+                    }
+                    
+                    if (!paramsElement.TryGetProperty("name", out JsonElement nameElement) || nameElement.ValueKind != JsonValueKind.String) {
+                         throw new ArgumentException("Invalid or missing 'name' in tools/call params");
+                    }
+					toolName = nameElement.GetString();
+                    if (string.IsNullOrWhiteSpace(toolName)) throw new ArgumentException("Tool name cannot be empty");
 
-					if (!paramsDict.TryGetValue("name", out object nameObj) || !(nameObj is string) || string.IsNullOrWhiteSpace((string)nameObj)) {
-						throw new ArgumentException("Invalid or missing 'name' in tools/call params");
-					}
-					toolName = (string)nameObj;
 
 					// Arguments are optional in the spec, but usually present if needed
-					if (paramsDict.TryGetValue("arguments", out object argsObj) && argsObj is Dictionary<string, object> argsDict) {
-						arguments = argsDict;
-					}
-					else {
-						arguments = new Dictionary<string, object>(); // Ensure arguments is not null
-					}
+                    if (paramsElement.TryGetProperty("arguments", out JsonElement argsElement) && argsElement.ValueKind == JsonValueKind.Object) {
+                        arguments = argsElement;
+                    }
+                    // else arguments is default/Undefined
 
-					if (pDebug) { Console.WriteLine($"Tool Call: {toolName} with args: {(arguments.Count > 0 ? _jsonSerializer.Serialize(arguments) : "None")}"); }
+					if (pDebug) { Console.WriteLine($"Tool Call: {toolName}"); }
 
 
 					// --- Execute Tool ---
@@ -674,13 +682,17 @@ namespace Example1.Extension {
 						var invokeArgs = new object[parameters.Length];
 						for (int i = 0; i < parameters.Length; i++) {
 							var param = parameters[i];
-							object argValue = null;
-							bool argProvided = arguments.TryGetValue(param.Name, out argValue);
+							
+                            JsonElement argParamElement = default;
+                            bool argProvided = false;
+                            if (arguments.ValueKind == JsonValueKind.Object) {
+                                argProvided = arguments.TryGetProperty(param.Name, out argParamElement);
+                            }
 
-							if (argProvided && argValue != null) {
+							if (argProvided) {
 								try {
 									// Use helper for type conversion
-									invokeArgs[i] = ConvertArgumentType(argValue, param.ParameterType, param.Name);
+									invokeArgs[i] = ConvertArgumentType(argParamElement, param.ParameterType, param.Name);
 								}
 								catch (Exception convEx) {
 									throw new ArgumentException($"Cannot convert argument '{param.Name}' for tool '{toolName}'. Error: {convEx.Message}", convEx);
@@ -702,9 +714,8 @@ namespace Example1.Extension {
 					}
 					else if (toolName.Equals("Echo", StringComparison.OrdinalIgnoreCase)) {
 						// Handle built-in Echo if needed (or rely on CommandImplementations)
-						object messageArg = null;
-						if (arguments.TryGetValue("message", out messageArg) && messageArg != null) {
-							resultText = $"Echo response: {messageArg}";
+						if (arguments.ValueKind == JsonValueKind.Object && arguments.TryGetProperty("message", out JsonElement msgElement)) {
+							resultText = $"Echo response: {msgElement}";
 							isError = false;
 						}
 						else {
@@ -758,30 +769,29 @@ namespace Example1.Extension {
 			}
 
 			// --- *** PROMPTS/GET Handler *** ---
-			private void HandlePromptsGet(string sessionId, object id, Dictionary<string, object> json) {
+			// --- *** PROMPTS/GET Handler *** ---
+			private void HandlePromptsGet(string sessionId, object id, JsonElement json) {
 				string promptName = null;
-				Dictionary<string, object> arguments = null;
+				JsonElement arguments = default;
 				PromptInfo promptInfo = null;
 
 				try {
 					// --- Parse Input ---
-					if (!json.TryGetValue("params", out object paramsObj) || !(paramsObj is Dictionary<string, object> paramsDict)) {
-						throw new ArgumentException("Invalid or missing 'params' object for prompts/get");
+                    if (!json.TryGetProperty("params", out JsonElement paramsElement) || paramsElement.ValueKind != JsonValueKind.Object) {
+                        throw new ArgumentException("Invalid or missing 'params' object for prompts/get");
+                    }
+                    
+                    if (!paramsElement.TryGetProperty("name", out JsonElement nameElement) || nameElement.ValueKind != JsonValueKind.String) {
+                         throw new ArgumentException("Invalid or missing 'name' in prompts/get params");
+                    }
+					promptName = nameElement.GetString();
+
+
+					if (paramsElement.TryGetProperty("arguments", out JsonElement argsElement) && argsElement.ValueKind == JsonValueKind.Object) {
+						arguments = argsElement;
 					}
 
-					if (!paramsDict.TryGetValue("name", out object nameObj) || !(nameObj is string) || string.IsNullOrWhiteSpace((string)nameObj)) {
-						throw new ArgumentException("Invalid or missing 'name' in prompts/get params");
-					}
-					promptName = (string)nameObj;
-
-					if (paramsDict.TryGetValue("arguments", out object argsObj) && argsObj is Dictionary<string, object> argsDict) {
-						arguments = argsDict;
-					}
-					else {
-						arguments = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase); // Use case-insensitive for lookups later
-					}
-
-					if (pDebug) { Console.WriteLine($"Handling prompts/get: {promptName} with args: {(arguments.Count > 0 ? _jsonSerializer.Serialize(arguments) : "None")}"); }
+					if (pDebug) { Console.WriteLine($"Handling prompts/get: {promptName}"); }
 
 					// --- Find Prompt ---
 					bool promptFound;
@@ -798,8 +808,9 @@ namespace Example1.Extension {
 					// --- Validate Required Arguments ---
 					if (promptInfo.arguments != null) {
 						foreach (var requiredArg in promptInfo.arguments.Where(a => a.required == true)) {
-							object argValue = null;
-							if (arguments == null || !arguments.TryGetValue(requiredArg.name, out argValue) || argValue == null) {
+							// Check if arguments contains the key
+                            bool argPresent = arguments.ValueKind == JsonValueKind.Object && arguments.TryGetProperty(requiredArg.name, out JsonElement _);
+							if (!argPresent) {
 								throw new ArgumentException($"Missing required argument '{requiredArg.name}' for prompt '{promptName}'.");
 							}
 						}
@@ -816,13 +827,15 @@ namespace Example1.Extension {
 								foreach (var argDef in promptInfo.arguments) {
 									string placeholder = $"{{{argDef.name}}}";
 									if (substitutedText.Contains(placeholder)) {
-										object argValueObj = null;
-										string actualArgValueString = ""; // Default empty
+										// Get value from arguments
+                                        string actualArgValueString = "";
+                                        if (arguments.ValueKind == JsonValueKind.Object && arguments.TryGetProperty(argDef.name, out JsonElement argVal)) {
+                                             actualArgValueString = argVal.ToString(); // Use default ToString logic of JsonElement which might be raw JSON? No, ToString returns value for simple types. 
+                                             // For strings it returns the string. For numbers it returns the string.
+                                             // Be careful with quotes if needed, but for templates simpler is likely better.
+                                        }
 
-										if (arguments != null && arguments.TryGetValue(argDef.name, out argValueObj) && argValueObj != null) {
-											actualArgValueString = Convert.ToString(argValueObj);
-										}
-										else if (argDef.required != true) // Optional arg is missing
+										if (string.IsNullOrEmpty(actualArgValueString) && argDef.required != true) // Optional arg is missing
 										{
 											actualArgValueString = ""; // Replace placeholder with empty
 										}
@@ -835,11 +848,10 @@ namespace Example1.Extension {
 								// Handle special optional placeholder example: {maxLengthPlaceholder}
 								string maxLengthPlaceholder = "{maxLengthPlaceholder}";
 								if (substitutedText.Contains(maxLengthPlaceholder)) {
-									object maxLengthObj = null;
 									string maxLengthText = ""; // Disappears if arg missing
-									if (arguments != null && arguments.TryGetValue("maxLength", out maxLengthObj) && maxLengthObj != null) {
-										maxLengthText = $" (max length: {maxLengthObj})"; // Appears if arg present
-									}
+                                    if (arguments.ValueKind == JsonValueKind.Object && arguments.TryGetProperty("maxLength", out JsonElement val)) {
+                                        maxLengthText = $" (max length: {val})";
+                                    }
 									substitutedText = substitutedText.Replace(maxLengthPlaceholder, maxLengthText);
 								}
 							}
@@ -913,58 +925,17 @@ namespace Example1.Extension {
 					throw new ArgumentNullException(paramName, $"Null provided for non-nullable parameter '{paramName}' of type {requiredType.Name}");
 				}
 
-				// If type already matches (common for strings, bools when deserialized)
-				if (requiredType.IsInstanceOfType(argValue)) return argValue;
-
-				// Handle numeric types explicitly, as JavaScriptSerializer might deserialize numbers as int, double, or decimal
-				if (requiredType == typeof(int)) return Convert.ToInt32(argValue);
-				if (requiredType == typeof(long)) return Convert.ToInt64(argValue);
-				if (requiredType == typeof(short)) return Convert.ToInt16(argValue);
-				if (requiredType == typeof(byte)) return Convert.ToByte(argValue);
-				if (requiredType == typeof(uint)) return Convert.ToUInt32(argValue);
-				if (requiredType == typeof(ulong)) return Convert.ToUInt64(argValue);
-				if (requiredType == typeof(ushort)) return Convert.ToUInt16(argValue);
-				if (requiredType == typeof(sbyte)) return Convert.ToSByte(argValue);
-				if (requiredType == typeof(float)) return Convert.ToSingle(argValue);
-				if (requiredType == typeof(double)) return Convert.ToDouble(argValue);
-				if (requiredType == typeof(decimal)) return Convert.ToDecimal(argValue);
-				if (requiredType == typeof(bool)) return Convert.ToBoolean(argValue);
-				if (requiredType == typeof(Guid)) return Guid.Parse(argValue.ToString());
-
-				if (requiredType.IsEnum) return System.Enum.Parse(requiredType, argValue.ToString(), ignoreCase: true);
-
-				// Handle simple arrays (e.g., string[] from List<object>)
-				if (requiredType.IsArray && argValue is System.Collections.ArrayList list) {
-					var elementType = requiredType.GetElementType();
-					var typedArray = Array.CreateInstance(elementType, list.Count);
-					for (int j = 0; j < list.Count; j++) {
-						try {
-							typedArray.SetValue(Convert.ChangeType(list[j], elementType), j);
-						}
-						catch (Exception ex) {
-							throw new InvalidCastException($"Cannot convert array element '{list[j]}' to type '{elementType.Name}' for parameter '{paramName}'.", ex);
-						}
-					}
-					return typedArray;
-				}
-				// Handle simple arrays (e.g., string[] from object[]) - JSON deserializer might give object[]
-				if (requiredType.IsArray && argValue is object[] objArray) {
-					var elementType = requiredType.GetElementType();
-					var typedArray = Array.CreateInstance(elementType, objArray.Length);
-					for (int j = 0; j < objArray.Length; j++) {
-						try {
-							typedArray.SetValue(Convert.ChangeType(objArray[j], elementType), j);
-						}
-						catch (Exception ex) {
-							throw new InvalidCastException($"Cannot convert array element '{objArray[j]}' to type '{elementType.Name}' for parameter '{paramName}'.", ex);
-						}
-					}
-					return typedArray;
+				if (argValue is JsonElement element) {
+                    if (element.ValueKind == JsonValueKind.Null) {
+                        if (requiredType.IsClass || Nullable.GetUnderlyingType(requiredType) != null) return null;
+                        throw new ArgumentNullException(paramName, $"Null provided for non-nullable parameter '{paramName}'");
+                    }
+					return JsonSerializer.Deserialize(element.GetRawText(), requiredType, _jsonOptions);
 				}
 
-
-				// Fallback for other types
+				// Fallback if not JsonElement (shouldn't happen with System.Text.Json parsing)
 				try {
+					if (requiredType.IsInstanceOfType(argValue)) return argValue;
 					return Convert.ChangeType(argValue, requiredType, System.Globalization.CultureInfo.InvariantCulture);
 				}
 				catch (Exception ex) {
@@ -1029,14 +1000,14 @@ namespace Example1.Extension {
 			// --- Additions: SSE Helper Methods ---
 			private void SendSseResult(string sessionId, object id, object result) {
 				var response = new JsonRpcResponse<object> { id = id, result = result };
-				string jsonData = _jsonSerializer.Serialize(response);
+				string jsonData = JsonSerializer.Serialize(response, _jsonOptions);
 				SendData(sessionId, jsonData);
 			}
 
 			private void SendSseError(string sessionId, object id, int code, string message, object data = null) {
 				var errorPayload = new JsonRpcError { code = code, message = message, data = data };
 				var response = new JsonRpcErrorResponse { id = id, error = errorPayload };
-				string jsonData = _jsonSerializer.Serialize(response);
+				string jsonData = JsonSerializer.Serialize(response, _jsonOptions);
 				SendData(sessionId, jsonData);
 			}
 
@@ -1109,7 +1080,8 @@ namespace Example1.Extension {
 
 
 			// --- Additions for Prompts and Resources ---
-			private static readonly JavaScriptSerializer _jsonSerializer = new JavaScriptSerializer(); // Re-use serializer
+			// --- Additions for Prompts and Resources ---
+			private static readonly JsonSerializerOptions _jsonOptions = new JsonSerializerOptions { PropertyNameCaseInsensitive = true, WriteIndented = false };
 
 			// Using a List to store prompts. The 'name' property within PromptInfo is used for identification.
 			private readonly List<PromptInfo> _prompts = new List<PromptInfo>
