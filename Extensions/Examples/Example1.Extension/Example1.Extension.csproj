@@ -27,8 +27,6 @@
     <Reference Include="ICSharpCode.TreeView">
       <HintPath>..\..\..\Libraries\ICSharpCode.TreeView\bin\Debug\net48\ICSharpCode.TreeView.dll</HintPath>
     </Reference>
-    <Reference Include="System.Web" />
-    <Reference Include="System.Web.Extensions" />
   </ItemGroup>
 
 </Project>
