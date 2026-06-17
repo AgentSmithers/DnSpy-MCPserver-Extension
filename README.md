@@ -1,110 +1,104 @@
-# dnSpyEx
+# AgentSmithers dnSpyEx MCPServer Extension
+This is a dnSpy MCPServer Extension for the use of automated AI .NET reverse engineering
+The \dnSpy\Extensions\Examples\AgentSmithers dnSpy MCPServer.Extension has been updated to include the MCPServer logic with a few starting function to feed the decompiled code back to the LLM.
+This is an ongoing project and I plan to continue to add commands as time persist.
 
-dnSpyEx is an unofficial continuation of the [dnSpy](https://github.com/dnSpy/dnSpy) project which is a debugger and .NET assembly editor. You can use it to edit and debug assemblies even if you don't have any source code available. Main features:
+To execute the server, run as Administrator so the the Http server may Listen on +:3001 (release is currently set to 3003) and *:50301 for the streamable MCP Server.
 
-- Debug .NET and Unity assemblies
-- Edit .NET and Unity assemblies
-- Light and dark themes
+The following command will suffice:
 
-See below for more features
+# Recommended debug workflow:
 
-![debug-animated](images/debug-animated.gif)
+Step 1: 
+Ensure dnSpy is set as Startup Project
 
-![edit-code-animated](images/edit-code-animated.gif)
+Step 2: Open Launch Settings
+In Solution Explorer, right-click on your project
+Select Properties
+In the left sidebar, click on Debug (or Debugging)
+Then go to "Open debug launch profiles UI"
 
-## Binaries
+Step 3: Add Command Line Arguments
+In the Command line arguments text box, enter:
+--extension-directory "$(SolutionDir)Extensions\Examples\Example1.Extension\bin\Debug\net48"
 
-Latest stable release: https://github.com/dnSpyEx/dnSpy/releases
+Step 4: Save
+Click Save or press Ctrl+S
+Close the properties window
 
-If you like living on the edge you can use the latest "beta" builds from:
-[![](https://github.com/dnSpyEx/dnSpy/workflows/GitHub%20CI/badge.svg)](https://github.com/dnSpyEx/dnSpy/actions)
+Step 5: Test
+Press F5 or click the green play button
+Your dnSpy should now launch with your extension loaded!
 
-## Building
+# OR
+cd {dnspy directory}
 
-```PS
-git clone --recursive https://github.com/dnSpyEx/dnSpy.git
-cd dnSpy
-# or dotnet build
-./build.ps1 -NoMsbuild
+dnspy.exe --extension-directory {Path to extension}
+Example 1: dnspy.exe --extension-directory "C:\repos\dnSpy\Extensions\Examples\Example1.Extension\bin\Debug\net48"
+
+Example 2 in CMD: C:\Users\user>"C:\Users\user\source\repos\DnSpy-MCPserver-Extension\dnSpy\dnSpy\bin\Debug\net48\dnspy.exe" --extension-directory "C:\Users\user\source\repos\DnSpy-MCPserver-Extension\dnSpy\dnSpy\bin\Debug\net48\Extensions"
+
+# OR
+In alternative you may copy the release into the Extension folder within the dnSpy\Extensions\AgentSmithersMCPServer path.
+
+## Modifying the project
+
+Ensure to compile the primary DnSpy Soultion (Clean and rebuild) so that the dependancies for "AgentSmithers DnSpyEx MCPServer" can use them for its own build. (Note: When compiling DnSpyEx you may have approx. ~20 errors, this will not prevent the 45 Projects from compiling)
+<img width="846" alt="image" src="https://github.com/user-attachments/assets/4d9269fa-ab0e-4392-8042-f79b31795e43" />
+<img width="991" alt="image" src="https://github.com/user-attachments/assets/57e708b3-05e9-4edd-8b72-53c0850c5304" />
+
+Once dnSpy is fully cleaned and compiled, navigate to the Example1 Extension Project. In there is the modified code.
+Make your adjustments, compile then use the --extension-directory argument when executing DnSpy.exe to point to your projects extension path.
+
+In alternative you may pull down the latest dnSpyEx then rename the Extension sample folder to another name and bring the modified extension folder over to recompile.
+
+## Compiling
+Clean and rebuild (I used visual Studio 2026, I think you'll need .NET Framework 4.8 and Core 10 Installed to compile the full solution)
+
+#Clearing the errors above upon inital IDE load - Not executing these steps may result in the error below.
+HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\FileSystem
+Find the value LongPathsEnabled.
+Double-click it and change the value to 1.
+Restart your computer (or at least restart Visual Studio).
+
+Argument 1: cannot convert from 'System.ReadOnlySpan<char>' to 'string'
+Cannot implicitly convert type 'System.ReadOnlySpan<char>' to 'string'
+Argument 1: cannot convert from 'System.ReadOnlySpan<char>' to 'string'
+Argument 1: cannot convert from 'System.ReadOnlySpan<char>' to 'string'
+foreach statement cannot operate on variables of type 'void' because 'void' does not contain a public instance or extension definition for 'GetEnumerator'
+Metadata file 'C:\Users\User\source\repos\DnSpy-MCPserver-Extension\dnSpy\dnSpy\obj\Debug\net48\ref\dnSpy.exe' could not be found
+Metadata file 'C:\Users\User\source\repos\DnSpy-MCPserver-Extension\dnSpy\dnSpy\obj\Debug\net8.0-windows\ref\dnSpy.dll' could not be found
+
+# Supported commands
+Currently readonly commands are supported to enumerate active namespaces, classes and functions by the AI. Plans are in the works to allow the AI to make interactive adjustments to the decompiled assemblies.
 ```
+Get_Selected_Node - Gets the currently selected node within dnSpyEx
+Get_Loaded_Assemblies - Gets all Assemblys currently loaded within dnSpyEx
+Namespaces_From_Assembly - Dumps all unique namespaces under a given Assembly
+Classes_From_Namespace - List all Classes under a given Namespace
+Get_Class_Sourcecode - Dumps a target Class sourcecode
+Get_Method_Prototypes - List all Method prototypes from a given Class within a given Namespace
+Get_Method_SourceCode - Dumps a target Method's sourcecode
+Update_Method_SourceCode - Update a target Method's sourcecode
+Get_Function_Opcodes - Returns the IL opcodes of the specified method (with source line numbers)
+Set_Function_Opcodes - Modifies the IL of the specified method at a given IL line index
+Update_Tabs_View - Update all active tabs to reflect any changes or adjustments
+Rename_Namespace - Renames exactly one distinct namespace across all types
+Rename_Class - Renames a specific class within a given Namespace
+Rename_Method - Renames a specific Methods by Class within a given Namespace
+These commands allow you to inspect and modify .NET assemblies loaded in dnSpyEx, including viewing and editing source code, IL code, and performing various renaming operations.
+```
+# Once the extension is loaded
+A messagebox will appear allowing you a chance to attach your debugger if nessessary
+![image](https://github.com/user-attachments/assets/f7a53b4c-e273-435e-9098-d92eb54fa84e)
 
-To debug Unity games, you need this repo too: https://github.com/dnSpyEx/dnSpy-Unity-mono
+Click "OK" and the MCPServer will load on :3001
 
-# Debugger
+Connect via SSE or if your application only supports STDIO (Claude Desktop / Windsurf) grab a copy of the STDIO<->SSE bridge
+https://github.com/AgentSmithers/MCPProxy-STDIO-to-SSE
 
-- Debug .NET Framework, .NET and Unity game assemblies, no source code required
-- Set breakpoints and step into any assembly
-- Locals, watch, autos windows
-- Variables windows support saving variables (eg. decrypted byte arrays) to disk or view them in the hex editor (memory window)
-- Object IDs
-- Multiple processes can be debugged at the same time
-- Break on module load
-- Tracepoints and conditional breakpoints
-- Export/import breakpoints and tracepoints
-- Optional Just My Code (JMC) stepping filters for system libraries
-- Call stack, threads, modules, processes windows
-- Break on thrown exceptions (1st chance)
-- Variables windows support evaluating C# / Visual Basic expressions
-- Dynamic modules can be debugged (but not dynamic methods due to CLR limitations)
-- Output window logs various debugging events, and it shows timestamps by default :)
-- Assemblies that decrypt themselves at runtime can be debugged, dnSpy will use the in-memory image. You can also force dnSpy to always use in-memory images instead of disk files.
-- Bypasses for common debugger detection techniques
-- Public API, you can write an extension or use the C# Interactive window to control the debugger
+Attach the Bridge AFTER hitting "OK" and your good to go.
 
-# Assembly Editor
+![image](https://github.com/user-attachments/assets/b8fa494e-2962-4733-a1f9-83f729c29811)
 
-- All metadata can be edited
-- Edit methods and classes in C# or Visual Basic with IntelliSense, no source code required
-- Add new methods, classes or members in C# or Visual Basic
-- IL editor for low-level IL method body editing
-- Low-level metadata tables can be edited. This uses the hex editor internally.
-
-# Hex Editor
-
-- Click on an address in the decompiled code to go to its IL code in the hex editor
-- The reverse of the above, press F12 in an IL body in the hex editor to go to the decompiled code or other high-level representation of the bits. It's great to find out which statement a patch modified.
-- Highlights .NET metadata structures and PE structures
-- Tooltips show more info about the selected .NET metadata / PE field
-- Go to position, file, RVA
-- Go to .NET metadata token, method body, #Blob / #Strings / #US heap offset or #GUID heap index
-- Follow references (Ctrl+F12)
-
-# Other
-
-- BAML decompiler and disassembler
-- Blue, light and dark themes (and a dark high contrast theme)
-- Bookmarks
-- C# Interactive window can be used to script dnSpy
-- Search assemblies for classes, methods, strings, etc
-- Analyze class and method usage, find callers, etc
-- Multiple tabs and tab groups
-- References are highlighted, use Tab / Shift+Tab to move to the next reference
-- Go to the entry point and module initializer commands
-- Go to metadata token or metadata row commands
-- Code tooltips (C# and Visual Basic)
-- Export to project
-
-# List of other open source libraries used by dnSpy
-
-- [ILSpy decompiler engine](https://github.com/icsharpcode/ILSpy) (C# and Visual Basic decompilers)
-- [Roslyn](https://github.com/dotnet/roslyn) (C# and Visual Basic compilers)
-- [dnlib](https://github.com/0xd4d/dnlib) (.NET metadata reader/writer which can also read obfuscated assemblies)
-- [VS MEF](https://github.com/microsoft/vs-mef) (Faster MEF equals faster startup)
-- [ClrMD](https://github.com/microsoft/clrmd) (Access to lower level debugging info not provided by the CorDebug API)
-- [Iced](https://github.com/icedland/iced) (x86/x64 disassembler)
-- [Newtonsoft.Json](https://github.com/JamesNK/Newtonsoft.Json) (JSON serializer & deserializer)
-- [NuGet.Configuration](https://github.com/NuGet/NuGet.Client) (NuGet configuration file reader)
-
-# Translating dnSpy
-
-[Click here](https://crowdin.com/project/dnspy) if you want to help with translating dnSpy to your native language.
-
-# Wiki
-
-See the [Wiki](https://github.com/dnSpyEx/dnSpy/wiki) for build instructions and other documentation.
-
-# License
-
-dnSpy is licensed under [GPLv3](dnSpy/dnSpy/LicenseInfo/GPLv3.txt).
-
-# [Credits](dnSpy/dnSpy/LicenseInfo/CREDITS.txt)
+![image](https://github.com/user-attachments/assets/851e1ef0-e9ee-400b-b185-4cbde3739894)
