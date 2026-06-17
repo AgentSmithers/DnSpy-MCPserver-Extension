@@ -1,0 +1,228 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Runtime.InteropServices;
+using System.Windows;
+using dnlib.DotNet;
+using dnlib.DotNet.Emit;
+using dnlib.PE;
+using dnSpy.Contracts.App;
+using dnSpy.Contracts.Documents.Tabs.DocViewer;
+using dnSpy.Contracts.Documents;
+using dnSpy.Contracts.Documents.TreeView;
+using dnSpy.Contracts.Menus;
+using dnSpy.Contracts.TreeView;
+using System.Diagnostics;
+using System.Xml.Linq;
+using dnSpy.Contracts.Decompiler;
+using dnSpy.Contracts.Text;
+using System.IO;
+using System.Text;
+
+// Adds a couple of commands to the file treeview context menu.
+// Since there are several commands using the same state, MenuItemBase<TContext> is used
+// as the base class so the context is created once and shared by all commands.
+
+namespace Example1.Extension {
+	sealed class TVContext {
+		public bool SomeValue { get; }
+		public DocumentTreeNodeData[] Nodes { get; }
+
+		public TVContext(bool someValue, IEnumerable<DocumentTreeNodeData> nodes) {
+			SomeValue = someValue;
+			Nodes = nodes.ToArray();
+		}
+	}
+
+	abstract class TVCtxMenuCommand : MenuItemBase<TVContext> {
+		protected sealed override object CachedContextKey => ContextKey;
+		static readonly object ContextKey = new object();
+
+		protected sealed override TVContext? CreateContext(IMenuItemContext context) {
+			// Make sure it's the file treeview
+			if (context.CreatorObject.Guid != new Guid(MenuConstants.GUIDOBJ_DOCUMENTS_TREEVIEW_GUID))
+				return null;
+
+			// Extract the data needed by the context
+			var nodes = context.Find<TreeNodeData[]>();
+			if (nodes is null)
+				return null;
+			var newNodes = nodes.OfType<DocumentTreeNodeData>();
+
+			bool someValue = true;
+			return new TVContext(someValue, newNodes);
+		}
+	}
+
+	[ExportMenuItem(Header = "Command #1", Group = Constants.GROUP_TREEVIEW, Order = 0)]
+	sealed class TVCommand1 : TVCtxMenuCommand {
+		public override void Execute(TVContext context) => MsgBox.Instance.Show("Command #1");
+		public override bool IsEnabled(TVContext context) => context.Nodes.Length > 1;
+	}
+
+	[ExportMenuItem(Header = "Command #2", Group = Constants.GROUP_TREEVIEW, Order = 10)]
+	sealed class TVCommand2 : TVCtxMenuCommand {
+
+		static IDsDocument? GetDocument(TreeNodeData node) {
+			var fileNode = node as DsDocumentNode;
+			if (fileNode is null)
+				return null;
+
+			var peImage = fileNode.Document.PEImage;
+			if (peImage is null)
+				peImage = (fileNode.Document.ModuleDef as ModuleDefMD)?.Metadata?.PEImage;
+
+			return (peImage as IInternalPEImage)?.IsMemoryMappedIO == true ? fileNode.Document : null;
+		}
+		public override void Execute(TVContext context) {
+			dnSpy.Contracts.Documents.DsDocument activeDocumentService = null;
+			var activeTextView = activeDocumentService;
+			Debug.WriteLine(context.Nodes[0].Text);
+			string? data;
+			bool sc = context.Nodes[0].TryGetData(out data);
+			Debug.WriteLine(data);
+			//context.Nodes[0].Context.DocumentTreeView.
+			//Debug.WriteLine(context.Nodes[0].Context.Decompiler.Decompile(dnSpy.Contracts.Decompiler.DecompilationType.TypeMethods, ));
+			//System.Diagnostics.Debug.WriteLine(context.Nodes);
+		}
+
+		//public override void Execute(TVContext context) => MsgBox.Instance.Show("Command #2");
+		public override bool IsVisible(TVContext context) => context.Nodes.Length > 0;
+	}
+
+	[ExportMenuItem(Header = "Command #3", Group = Constants.GROUP_TREEVIEW, Order = 20)]
+	sealed class TVCommand3 : TVCtxMenuCommand {
+		public override void Execute(TVContext context) {
+			int secretNum = new Random().Next() % 10;
+			MsgBox.Instance.Ask<int?>("Number", null, "Guess a number", null, s => {
+				if (string.IsNullOrWhiteSpace(s))
+					return "Enter a number";
+				if (!int.TryParse(s, out int num))
+					return "Not an integer";
+				if (num == 42)
+					return "Nope!";
+				if (num != secretNum)
+					return "WRONG!!!";
+				return string.Empty;
+			});
+		}
+	}
+
+	[ExportMenuItem(Header = "Command #4", Group = Constants.GROUP_TREEVIEW, Order = 30)]
+	sealed class TVCommand4 : TVCtxMenuCommand {
+		//Must highlight class with active code
+		Instruction? GetAllInstructions(TVContext context) {
+			if (context.Nodes.Length == 0)
+				return null;
+			
+			var methNode = context.Nodes[0] as MethodNode;
+			if (methNode is null)
+				return null;
+
+			var methodDef = methNode.MethodDef;
+			var ReturnType = methNode.MethodDef.ReturnType;
+			var Params = methNode.MethodDef.Parameters;
+
+			var module = methodDef.Module;
+
+			var body = methNode.MethodDef.Body;
+			var ilcode = methNode.MethodDef.Body.Instructions;
+			var vars = methNode.MethodDef.Body.Variables;
+			
+			var decompiler = context.Nodes[0].Context.Decompiler;
+			var settings = decompiler.Settings;
+			
+			// 1) Create your own DecompilationContext (no factory method)
+			var decCtx = new DecompilationContext();
+
+			// 2) Wire up a StringWriter + WriterOutput so we can capture the C# text
+			var sb = new StringBuilder();
+			using (var sw = new StringWriter(sb)) {
+				// Indenter(4,4,true) matches the default C# settings in DNSpy
+				var indenter = new Indenter(4, 4, true);
+				var textOutput = new TextWriterDecompilerOutput(sw, indenter);
+
+				// 3) This is the correct overload:
+				//    Decompile(MethodDef, IDecompilerOutput, DecompilationContext)
+				decompiler.Decompile(methodDef, textOutput, decCtx);  // :contentReference[oaicite:1]{index=1}
+			}
+
+			// 4) Copy the result to the clipboard
+			try {
+				Clipboard.SetText(sb.ToString());
+			}
+			catch (ExternalException) {
+				// swallow
+			}
+
+			if (body is null || body.Instructions.Count < 2)
+				return null;
+			return body.Instructions[1];
+		}
+		public override void Execute(TVContext context) {
+			var instr = GetAllInstructions(context);
+			if (instr is not null) {
+				try {
+					Clipboard.SetText($"Second instruction: {instr}");
+				}
+				catch (ExternalException) { }
+			}
+		}
+		//public override bool IsEnabled(TVContext context) => context.Nodes.Length == 1 && context.Nodes[0] is ModuleDocumentNode;
+	}
+
+	[ExportMenuItem(Group = Constants.GROUP_TREEVIEW, Order = 40)]
+	sealed class TVCommand5 : TVCtxMenuCommand {
+		public override void Execute(TVContext context) {
+			var node = GetTokenNode(context);
+			if (node is not null) {
+				try {
+					Clipboard.SetText($"{node.Reference!.MDToken.Raw:X8}");
+				}
+				catch (ExternalException) { }
+			}
+		}
+
+		IMDTokenNode? GetTokenNode(TVContext context) {
+			if (context.Nodes.Length == 0)
+				return null;
+			return context.Nodes[0] as IMDTokenNode;
+		}
+
+		public override string? GetHeader(TVContext context) {
+			var node = GetTokenNode(context);
+			if (node is null)
+				return string.Empty;
+			return $"Copy token {node.Reference!.MDToken.Raw:X8}";
+		}
+
+		public override bool IsVisible(TVContext context) => GetTokenNode(context) is not null;
+	}
+
+	[ExportMenuItem(Header = "Copy Second Instruction", Group = Constants.GROUP_TREEVIEW, Order = 50)]
+	sealed class TVCommand6 : TVCtxMenuCommand {
+		public override void Execute(TVContext context) {
+			var instr = GetSecondInstruction(context);
+			if (instr is not null) {
+				try {
+					Clipboard.SetText($"Second instruction: {instr}");
+				}
+				catch (ExternalException) { }
+			}
+		}
+
+		Instruction? GetSecondInstruction(TVContext context) {
+			if (context.Nodes.Length == 0)
+				return null;
+			var methNode = context.Nodes[0] as MethodNode;
+			if (methNode is null)
+				return null;
+			var body = methNode.MethodDef.Body;
+			if (body is null || body.Instructions.Count < 2)
+				return null;
+			return body.Instructions[1];
+		}
+
+		public override bool IsEnabled(TVContext context) => GetSecondInstruction(context) is not null;
+	}
+}

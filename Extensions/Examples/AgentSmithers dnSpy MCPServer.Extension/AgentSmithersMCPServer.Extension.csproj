@@ -1,0 +1,32 @@
+﻿<Project Sdk="Microsoft.NET.Sdk.WindowsDesktop">
+
+  <Import Project="..\..\..\DnSpyCommon.props" />
+
+  <PropertyGroup>
+    <AssemblyName>Example1.Extension.x</AssemblyName>
+    <Nullable>enable</Nullable>
+    <UseWPF>true</UseWPF>
+    <TargetFrameworks>net48</TargetFrameworks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\dnSpy\dnSpy.Contracts.DnSpy\dnSpy.Contracts.DnSpy.csproj" />
+    <ProjectReference Include="..\..\..\dnSpy\dnSpy.Contracts.Logic\dnSpy.Contracts.Logic.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.13.0" />
+    <PackageReference Include="Microsoft.VisualStudio.Text.UI.Wpf" Version="$(MSVSTextVersion)" />
+    <PackageReference Include="System.Text.Json" Version="9.0.4" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="dnSpy.Roslyn">
+      <HintPath>..\..\..\dnSpy\dnSpy\bin\Debug\net48\dnSpy.Roslyn.dll</HintPath>
+    </Reference>
+    <Reference Include="ICSharpCode.TreeView">
+      <HintPath>..\..\..\Libraries\ICSharpCode.TreeView\bin\Debug\net48\ICSharpCode.TreeView.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+
+</Project>
